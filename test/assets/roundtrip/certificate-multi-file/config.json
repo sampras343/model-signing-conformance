@@ -1,0 +1,8 @@
+{
+  "method": "certificate",
+  "model": "models/multi-file",
+  "private_key": "keys/certificate/signing-key.pem",
+  "signing_cert": "keys/certificate/signing-key-cert.pem",
+  "cert_chain": ["keys/certificate/int-ca-cert.pem", "keys/certificate/ca-cert.pem"],
+  "expected_signed_files": ["config.json", "subdir/adapter.bin", "weights.bin"]
+}

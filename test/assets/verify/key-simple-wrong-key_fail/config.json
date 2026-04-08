@@ -1,0 +1,7 @@
+{
+  "method": "key",
+  "model_path": "model",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/wrong/wrong-key-pub.pem",
+  "_note": "Bundle is valid but verified against wrong public key - must fail"
+}

@@ -1,0 +1,5 @@
+{
+  "method": "key",
+  "model_path": "model/signme-1",
+  "public_key": "keys/certificate/signing-key-pub.pem"
+}

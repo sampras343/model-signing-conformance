@@ -1,0 +1,6 @@
+{
+  "method": "certificate",
+  "model_path": "model",
+  "ignore_paths": ["ignore-me"],
+  "cert_chain": ["keys/certificate/ca-cert.pem"]
+}

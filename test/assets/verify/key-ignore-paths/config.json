@@ -1,0 +1,7 @@
+{
+  "method": "key",
+  "model_path": "model",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "expected_signed_files": ["signme-1", "signme-2"]
+}

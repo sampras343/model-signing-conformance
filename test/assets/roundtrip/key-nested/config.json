@@ -1,0 +1,7 @@
+{
+  "method": "key",
+  "model": "models/multi-file",
+  "private_key": "keys/certificate/signing-key.pem",
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "expected_signed_files": ["config.json", "subdir/adapter.bin", "weights.bin"]
+}

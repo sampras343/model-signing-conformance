@@ -1,0 +1,7 @@
+{
+  "method": "key",
+  "model_path": "model",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "_note": "signme-1 has been modified after signing - verification must fail"
+}

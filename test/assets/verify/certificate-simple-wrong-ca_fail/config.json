@@ -1,0 +1,7 @@
+{
+  "method": "certificate",
+  "model_path": "model",
+  "ignore_paths": ["ignore-me"],
+  "cert_chain": ["keys/wrong/wrong-ca-cert.pem"],
+  "_note": "Bundle is valid but verified against wrong CA cert - must fail"
+}

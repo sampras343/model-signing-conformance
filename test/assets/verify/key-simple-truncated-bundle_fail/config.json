@@ -1,0 +1,6 @@
+{
+  "method": "key",
+  "model_path": "model",
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "_note": "bundle.sig is truncated (first 100 bytes of a real bundle) - must fail"
+}
