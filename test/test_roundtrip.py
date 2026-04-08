@@ -1,0 +1,106 @@
+"""Sign-then-verify round-trip tests.
+
+Each subdirectory in test/assets/roundtrip/ is one test case with a ``config.json``
+that specifies the method, model, key material, and expected outcomes.
+
+These tests require signing capability and are skipped when ``--skip-signing`` is passed.
+"""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from .client import ModelSigningClient, SignConfig, VerifyConfig
+
+ASSETS = Path(__file__).parent / "assets"
+
+
+@pytest.mark.signing
+def test_roundtrip(
+    client: ModelSigningClient, roundtrip_dir: Path, tmp_path: Path
+) -> None:
+    """Sign a model then verify the produced bundle with the same client."""
+    config_path = roundtrip_dir / "config.json"
+    if not config_path.exists():
+        pytest.fail(f"Missing config.json in {roundtrip_dir}")
+
+    cfg = SignConfig.from_json(config_path)
+
+    # Copy model to tmp workspace
+    model_src = ASSETS / cfg.model
+    if not model_src.exists():
+        pytest.fail(f"Model directory not found: {model_src}")
+
+    model_copy = tmp_path / "model"
+    shutil.copytree(model_src, model_copy)
+
+    bundle_path = tmp_path / "bundle.sig"
+
+    # Sign (ignore_paths in cfg are relative names; sign() expands them against model_copy)
+    sign_result = client.sign(
+        method=cfg.method,
+        model_path=model_copy,
+        output_bundle=bundle_path,
+        cfg=cfg,
+        assets_root=ASSETS,
+    )
+    assert sign_result.returncode == 0, (
+        f"Signing failed for {roundtrip_dir.name}\n"
+        f"stdout: {sign_result.stdout}\nstderr: {sign_result.stderr}"
+    )
+    assert bundle_path.exists(), f"bundle.sig not created after signing for {roundtrip_dir.name}"
+
+    # For ignore-unsigned tests: add an unsigned file after signing
+    if cfg.ignore_unsigned_files and cfg.ignore_paths:
+        (model_copy / "injected.bin").write_text("injected after signing\n")
+
+    # Build verify config — key paths are relative to ASSETS
+    verify_cfg = VerifyConfig(
+        method=cfg.method,
+        model_path=str(model_copy),
+        public_key=cfg.public_key,
+        cert_chain=cfg.cert_chain,
+        ignore_paths=cfg.ignore_paths,
+        ignore_unsigned_files=cfg.ignore_unsigned_files,
+        expected_signed_files=cfg.expected_signed_files,
+    )
+
+    # Verify (ignore_paths expanded to absolute by client.verify() against model_copy)
+    verify_result = client.verify(
+        method=cfg.method,
+        model_path=model_copy,
+        bundle=bundle_path,
+        cfg=verify_cfg,
+        keys_root=ASSETS,
+    )
+    assert verify_result.returncode == 0, (
+        f"Verification failed for {roundtrip_dir.name}\n"
+        f"stdout: {verify_result.stdout}\nstderr: {verify_result.stderr}"
+    )
+
+    # Validate signed files if specified
+    if cfg.expected_signed_files:
+        actual = client.get_signed_files(bundle_path)
+        assert actual == sorted(cfg.expected_signed_files), (
+            f"Signed files mismatch in {roundtrip_dir.name}:\n"
+            f"  expected: {sorted(cfg.expected_signed_files)}\n"
+            f"  actual:   {actual}"
+        )
+
+    # Determinism check: sign again and compare manifests
+    if "deterministic" in roundtrip_dir.name:
+        bundle_path2 = tmp_path / "bundle2.sig"
+        sign_result2 = client.sign(
+            method=cfg.method,
+            model_path=model_copy,
+            output_bundle=bundle_path2,
+            cfg=cfg,
+            assets_root=ASSETS,
+        )
+        assert sign_result2.returncode == 0
+        assert client.get_signed_files(bundle_path) == client.get_signed_files(bundle_path2), (
+            f"Non-deterministic signing detected for {roundtrip_dir.name}"
+        )

@@ -1,0 +1,38 @@
+name: 'model-signing conformance'
+description: >
+  Run model-signing conformance tests against a language client adapter.
+  Reports pass/fail counts per test category and uploads a JSON artifact.
+
+inputs:
+  entrypoint:
+    description: >
+      Path to the conformance adapter binary or script.
+      The adapter must implement the sign-model and verify-model subcommands
+      as described in the conformance protocol (see README.md).
+    required: true
+
+  skip-signing:
+    description: >
+      Set to 'true' to skip sign+verify round-trip tests.
+      Verify-only tests (pre-committed bundles) still run.
+    default: 'false'
+
+  xfail:
+    description: >
+      Newline- or comma-separated list of test IDs to mark as expected failures.
+      Tests matching these IDs will be counted as 'xfailed' rather than 'failed'.
+      Example:
+        xfail: |
+          test_roundtrip[certificate-simple]
+          test_verify[historical-v0.2.0-certificate]
+    default: ''
+
+  skip-result-upload:
+    description: >
+      Set to 'true' to skip uploading the conformance-report.json artifact.
+      Useful for testing the action locally.
+    default: 'false'
+
+runs:
+  using: 'python3'
+  main: 'action.py'
