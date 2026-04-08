@@ -23,9 +23,11 @@ jobs:
           - name: model-transparency-go
             repo: sampras343/model-transparency-go
             artifact: conformance-report
+            workflow: conformance.yml
           - name: model-transparency-python
             repo: sigstore/model-transparency
             artifact: conformance-report
+            workflow: conformance.yml
 
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +37,7 @@ jobs:
         with:
           github_token: ${{ secrets.CONFORMANCE_READ_TOKEN }}
           repo: ${{ matrix.client.repo }}
+          workflow: ${{ matrix.client.workflow }}
           name: ${{ matrix.client.artifact }}
           path: results/
           if_no_artifact_found: warn
