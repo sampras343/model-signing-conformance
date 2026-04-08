@@ -25,7 +25,7 @@ jobs:
             artifact: conformance-report
             workflow: conformance.yml
           - name: model-transparency-python
-            repo: sigstore/model-transparency
+            repo: sampras343/model-transparency
             artifact: conformance-report
             workflow: conformance.yml
 
