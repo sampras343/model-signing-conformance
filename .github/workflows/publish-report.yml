@@ -1,0 +1,96 @@
+name: Publish Conformance Report
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  fetch-results:
+    name: Fetch results from ${{ matrix.client.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        client:
+          - name: model-transparency-go
+            repo: sampras343/model-transparency-go
+            artifact: conformance-report
+          - name: model-transparency-python
+            repo: sigstore/model-transparency
+            artifact: conformance-report
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download conformance artifact from ${{ matrix.client.repo }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.CONFORMANCE_READ_TOKEN }}
+          repo: ${{ matrix.client.repo }}
+          name: ${{ matrix.client.artifact }}
+          path: results/
+          if_no_artifact_found: warn
+        continue-on-error: true
+
+      - name: Rename artifact to client name
+        run: |
+          mkdir -p results
+          if [ -f results/conformance-report.json ]; then
+            mv results/conformance-report.json results/${{ matrix.client.name }}.json
+          else
+            echo '{}' > results/${{ matrix.client.name }}.json
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-result-${{ matrix.client.name }}
+          path: results/${{ matrix.client.name }}.json
+
+  build-report:
+    name: Build HTML report
+    runs-on: ubuntu-latest
+    needs: fetch-results
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all client results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: client-result-*
+          merge-multiple: true
+          path: results/
+
+      - name: Generate HTML report
+        run: python .github/scripts/generate_report.py --reports-dir results/ --output results/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: results/
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-report
+    if: always()
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
