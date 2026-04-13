@@ -1,6 +1,8 @@
 {
   "method": "key",
-  "model_path": "model",
+  "model": "models/simple",
   "public_key": "keys/certificate/signing-key-pub.pem",
-  "_note": "bundle.sig is invalid JSON - must fail"
+  "model_modifications": {
+    "delete": ["ignore-me"]
+  }
 }

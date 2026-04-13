@@ -7,10 +7,13 @@ Each subdirectory in test/assets/verify/ is one test case.
 Each directory must contain:
   - ``config.json``  — verification parameters (see client.VerifyConfig)
   - ``bundle.sig``   — the pre-committed bundle to verify
-  - model files      — at the path specified by config.json ``model_path``
-  - key material     — at paths specified in config.json (relative to the case dir)
+
+Model specification (one of):
+  - ``model`` field in config.json — path relative to assets/ (preferred)
+  - ``model_path`` field in config.json — path relative to test case dir (legacy)
 
 Optional:
+  - ``model_modifications`` in config.json — changes to apply before verification
   - ``xfail_reason.txt`` — if present, the test is marked xfail with that text
 """
 
@@ -31,6 +34,41 @@ def _load_xfail_reason(case_dir: Path) -> str | None:
     if f.exists():
         return f.read_text().strip()
     return None
+
+
+def _resolve_model(
+    cfg: VerifyConfig, verify_dir: Path, tmp_path: Path
+) -> Path:
+    """Resolve model path, copying to temp dir if using shared models."""
+    if cfg.model:
+        # New style: model path relative to assets/
+        model_src = ASSETS / cfg.model
+        if not model_src.exists():
+            pytest.fail(f"Shared model not found: {model_src}")
+
+        # Copy to temp directory
+        if model_src.is_file():
+            # For single-file models, preserve the filename
+            model_copy = tmp_path / model_src.name
+            shutil.copy2(model_src, model_copy)
+        else:
+            model_copy = tmp_path / "model"
+            shutil.copytree(model_src, model_copy)
+
+        # Apply modifications if specified
+        if cfg.model_modifications:
+            target = model_copy if model_copy.is_dir() else model_copy.parent
+            cfg.model_modifications.apply(target)
+
+        return model_copy
+    elif cfg.model_path:
+        # Legacy style: model path relative to test case directory
+        model_path = verify_dir / cfg.model_path
+        if not model_path.exists():
+            pytest.fail(f"Model path does not exist: {model_path}")
+        return model_path
+    else:
+        pytest.fail(f"Config must specify either 'model' or 'model_path'")
 
 
 def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) -> None:
@@ -57,12 +95,10 @@ def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) ->
     if not bundle.exists():
         pytest.fail(f"Missing bundle.sig in {verify_dir}")
 
-    # Resolve model path (relative to the test case directory)
-    model_path = verify_dir / cfg.model_path
-    if not model_path.exists():
-        pytest.fail(f"Model path does not exist: {model_path}")
+    # Resolve model path (copy to temp if using shared models)
+    model_path = _resolve_model(cfg, verify_dir, tmp_path)
 
-    # Run verification — key paths are relative to ASSETS, not the case dir
+    # Run verification — key paths are relative to ASSETS
     result = client.verify(
         method=cfg.method,
         model_path=model_path,

@@ -1,7 +1,9 @@
 {
   "method": "key",
-  "model_path": "model",
+  "model": "models/simple",
   "ignore_paths": ["ignore-me"],
   "public_key": "keys/certificate/signing-key-pub.pem",
-  "_note": "injected.bin is not in the bundle - verification without --ignore-unsigned-files must fail"
+  "model_modifications": {
+    "inject": {"injected.bin": "injected after signing\n"}
+  }
 }
