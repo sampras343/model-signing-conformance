@@ -1,0 +1,7 @@
+{
+  "method": "key",
+  "model": "models/hidden-subdir",
+  "private_key": "keys/certificate/signing-key.pem",
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "expected_signed_files": [".cache/weights.bin", ".local/share/data.bin", "model.bin"]
+}
