@@ -1,0 +1,6 @@
+{
+  "method": "key",
+  "model": "models/simple",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem"
+}

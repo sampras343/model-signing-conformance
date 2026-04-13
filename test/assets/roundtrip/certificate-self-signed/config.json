@@ -1,0 +1,9 @@
+{
+  "method": "certificate",
+  "model": "models/simple",
+  "private_key": "keys/self-signed/signing-key.pem",
+  "signing_cert": "keys/self-signed/signing-cert.pem",
+  "cert_chain": ["keys/self-signed/signing-cert.pem"],
+  "ignore_paths": ["ignore-me"],
+  "expected_signed_files": ["signme-1", "signme-2"]
+}
