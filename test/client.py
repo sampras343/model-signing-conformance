@@ -10,27 +10,61 @@ from typing import Optional
 
 
 @dataclass
+class ModelModifications:
+    """Modifications to apply to a copied model before verification."""
+    tamper: dict[str, str] = field(default_factory=dict)  # {filename: new_content}
+    delete: list[str] = field(default_factory=list)       # filenames to delete
+    inject: dict[str, str] = field(default_factory=dict)  # {filename: content}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ModelModifications":
+        return cls(
+            tamper=data.get("tamper", {}),
+            delete=data.get("delete", []),
+            inject=data.get("inject", {}),
+        )
+
+    def apply(self, model_dir: Path) -> None:
+        """Apply modifications to a model directory."""
+        for filename, content in self.tamper.items():
+            (model_dir / filename).write_text(content)
+        for filename in self.delete:
+            path = model_dir / filename
+            if path.exists():
+                path.unlink()
+        for filename, content in self.inject.items():
+            (model_dir / filename).write_text(content)
+
+
+@dataclass
 class VerifyConfig:
     """Verification parameters loaded from a verify/ test case config.json."""
     method: str
-    model_path: str                          # relative to test case dir
-    public_key: Optional[str] = None        # relative to test case dir
-    cert_chain: list[str] = field(default_factory=list)  # relative to test case dir
+    model_path: Optional[str] = None         # relative to test case dir (legacy)
+    model: Optional[str] = None              # relative to assets/ (new style)
+    public_key: Optional[str] = None         # relative to assets/keys/
+    cert_chain: list[str] = field(default_factory=list)
     ignore_paths: list[str] = field(default_factory=list)
     ignore_unsigned_files: bool = False
     expected_signed_files: Optional[list[str]] = None
+    model_modifications: Optional[ModelModifications] = None
 
     @classmethod
     def from_json(cls, path: Path) -> "VerifyConfig":
         data = json.loads(path.read_text())
+        mods = None
+        if "model_modifications" in data:
+            mods = ModelModifications.from_dict(data["model_modifications"])
         return cls(
             method=data["method"],
-            model_path=data["model_path"],
+            model_path=data.get("model_path"),
+            model=data.get("model"),
             public_key=data.get("public_key"),
             cert_chain=data.get("cert_chain", []),
             ignore_paths=data.get("ignore_paths", []),
             ignore_unsigned_files=data.get("ignore_unsigned_files", False),
             expected_signed_files=data.get("expected_signed_files"),
+            model_modifications=mods,
         )
 
 

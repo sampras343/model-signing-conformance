@@ -1,7 +1,9 @@
 {
   "method": "key",
-  "model_path": "model",
+  "model": "models/simple",
   "ignore_paths": ["ignore-me"],
   "public_key": "keys/certificate/signing-key-pub.pem",
-  "_note": "signme-2 removed from model after signing - must fail because signed file is missing"
+  "model_modifications": {
+    "delete": ["signme-2"]
+  }
 }

@@ -1,6 +1,6 @@
 {
   "method": "key",
-  "model_path": "model",
+  "model": "models/single-file",
   "public_key": "keys/certificate/signing-key-pub.pem",
   "expected_signed_files": ["model.bin"]
 }
