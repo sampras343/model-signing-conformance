@@ -1,0 +1,11 @@
+{
+  "description": "Verifies --ignore-unsigned-files allows extra unsigned files to pass verification",
+  "method": "key",
+  "model": "models/simple",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "ignore_unsigned_files": true,
+  "model_modifications": {
+    "inject": {"extra.bin": "extra file added after signing\n"}
+  }
+}

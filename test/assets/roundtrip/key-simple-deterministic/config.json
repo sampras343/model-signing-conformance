@@ -1,4 +1,5 @@
 {
+  "description": "Verifies signing the same model twice produces identical manifests (deterministic)",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

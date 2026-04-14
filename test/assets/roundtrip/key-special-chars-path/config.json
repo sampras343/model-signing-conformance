@@ -1,4 +1,5 @@
 {
+  "description": "Signing and verification of models with spaces and special characters in paths",
   "method": "key",
   "model": "models/special-chars",
   "private_key": "keys/certificate/signing-key.pem",

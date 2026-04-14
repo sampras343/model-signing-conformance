@@ -1,4 +1,5 @@
 {
+  "description": "Verifies files in hidden directories (.cache/, .local/) ARE signed, not excluded",
   "method": "key",
   "model": "models/hidden-subdir",
   "private_key": "keys/certificate/signing-key.pem",

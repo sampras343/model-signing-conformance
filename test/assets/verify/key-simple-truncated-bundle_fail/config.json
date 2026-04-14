@@ -1,8 +1,0 @@
-{
-  "method": "key",
-  "model": "models/simple",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "model_modifications": {
-    "delete": ["ignore-me"]
-  }
-}

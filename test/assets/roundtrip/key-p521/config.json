@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip using EC P-521 key (spec MUST support)",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/p521/signing-key.pem",

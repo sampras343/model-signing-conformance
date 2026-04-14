@@ -1,4 +1,5 @@
 {
+  "description": "Certificate roundtrip validating full chain (leaf → intermediate CA → root CA)",
   "method": "certificate",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

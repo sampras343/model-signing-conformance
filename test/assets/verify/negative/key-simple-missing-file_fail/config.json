@@ -1,0 +1,10 @@
+{
+  "description": "FAIL: Detection of a missing file that was included in the bundle",
+  "method": "key",
+  "model": "models/simple",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "model_modifications": {
+    "delete": ["signme-2"]
+  }
+}

@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip on a model with Unicode characters in filenames",
   "method": "key",
   "model": "models/unicode-names",
   "private_key": "keys/certificate/signing-key.pem",

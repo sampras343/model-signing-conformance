@@ -1,0 +1,9 @@
+{
+  "description": "FAIL: Rejection of bundle file containing invalid/garbage JSON",
+  "method": "key",
+  "model": "models/simple",
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "model_modifications": {
+    "delete": ["ignore-me"]
+  }
+}

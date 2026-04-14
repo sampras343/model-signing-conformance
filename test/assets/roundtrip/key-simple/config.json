@@ -1,4 +1,5 @@
 {
+  "description": "Basic key sign-then-verify roundtrip on a simple two-file model",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

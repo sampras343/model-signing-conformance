@@ -1,4 +1,5 @@
 {
+  "description": "Certificate sign-then-verify roundtrip using 3-level PKI chain",
   "method": "certificate",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

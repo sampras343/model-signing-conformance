@@ -1,4 +1,5 @@
 {
+  "description": "Roundtrip with --ignore-paths excluding a file during signing",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

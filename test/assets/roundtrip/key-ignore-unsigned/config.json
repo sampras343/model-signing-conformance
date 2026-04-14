@@ -1,4 +1,5 @@
 {
+  "description": "Roundtrip with --ignore-unsigned-files to tolerate files added after signing",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/certificate/signing-key.pem",

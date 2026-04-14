@@ -1,4 +1,5 @@
 {
+  "description": "Certificate roundtrip on a model with subdirectories",
   "method": "certificate",
   "model": "models/multi-file",
   "private_key": "keys/certificate/signing-key.pem",
