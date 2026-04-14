@@ -108,8 +108,8 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
 </head>
 <body>
   <nav>
-    <a class="active" href="/">Conformance</a>
-    <a href="/benchmarks/">Benchmarks</a>
+    <a class="active" href="./">Conformance</a>
+    <a href="./benchmarks/">Benchmarks</a>
   </nav>
   <h1>model-signing Conformance Report</h1>
   <p class="subtitle">

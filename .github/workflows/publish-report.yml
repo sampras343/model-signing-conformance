@@ -93,7 +93,7 @@ jobs:
           if [ -f results/benchmarks/benchmarks-index.html ]; then
             mv results/benchmarks/benchmarks-index.html results/benchmarks/index.html
           else
-            echo '<html><body><p>Benchmark results not yet available — run the <strong>Collect Benchmark Results</strong> workflow first.</p><p><a href="/">← Conformance Report</a></p></body></html>' \
+            echo '<html><body><p>Benchmark results not yet available — run the <strong>Collect Benchmark Results</strong> workflow first.</p><p><a href="../">← Conformance Report</a></p></body></html>' \
               > results/benchmarks/index.html
           fi
 

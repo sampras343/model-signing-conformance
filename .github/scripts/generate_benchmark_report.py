@@ -212,8 +212,8 @@ def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
 </head>
 <body>
   <nav>
-    <a href="/">Conformance</a>
-    <a class="active" href="/benchmarks/">Benchmarks</a>
+    <a href="../">Conformance</a>
+    <a class="active" href="./">Benchmarks</a>
   </nav>
   <h1>OpenSSF Model Signing — Benchmark Report</h1>
   <p>
