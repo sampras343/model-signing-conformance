@@ -34,6 +34,10 @@ inputs:
     description: 'Git ref of model-signing-conformance to use (tag, branch, or SHA)'
     required: false
     default: 'main'
+  model-signing-bin:
+    description: 'Absolute path to the model-signing binary (passed as MODEL_SIGNING_BIN to the adapter)'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -65,6 +69,8 @@ runs:
 
     - name: Run benchmark harness
       shell: bash
+      env:
+        MODEL_SIGNING_BIN: ${{ inputs.model-signing-bin }}
       run: |
         CI_FLAG=""
         if [ "${{ inputs.ci }}" = "true" ]; then
