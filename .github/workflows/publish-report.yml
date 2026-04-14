@@ -70,14 +70,34 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Download all client results
+      - name: Download all client conformance results
         uses: actions/download-artifact@v4
         with:
           pattern: client-result-*
           merge-multiple: true
           path: results/
 
-      - name: Generate HTML report
+      - name: Download benchmark HTML from collect-benchmarks workflow
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: collect-benchmarks.yml
+          name: benchmark-html
+          path: results/benchmarks/
+          if_no_artifact_found: warn
+        continue-on-error: true
+
+      - name: Place benchmark page
+        run: |
+          mkdir -p results/benchmarks
+          if [ -f results/benchmarks/benchmarks-index.html ]; then
+            mv results/benchmarks/benchmarks-index.html results/benchmarks/index.html
+          else
+            echo '<html><body><p>Benchmark results not yet available — run the <strong>Collect Benchmark Results</strong> workflow first.</p><p><a href="/">← Conformance Report</a></p></body></html>' \
+              > results/benchmarks/index.html
+          fi
+
+      - name: Generate HTML conformance report
         run: python .github/scripts/generate_report.py --reports-dir results/ --output results/index.html
 
       - uses: actions/upload-pages-artifact@v3

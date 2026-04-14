@@ -83,7 +83,12 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
   <title>model-signing Conformance Report</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #333; }}
+            max-width: 900px; margin: 0 auto; padding: 0 1rem 2rem; color: #333; }}
+    nav {{ background: #1a1a2e; padding: .6rem 1rem; margin: 0 -1rem 1.5rem;
+           display: flex; gap: 1.5rem; align-items: center; }}
+    nav a {{ color: #ccd6f6; text-decoration: none; font-size: .9rem; font-weight: 500; }}
+    nav a:hover {{ color: #fff; }}
+    nav a.active {{ color: #fff; border-bottom: 2px solid #7eb3ff; padding-bottom: 1px; }}
     h1 {{ color: #1a1a2e; }}
     .subtitle {{ color: #666; margin-top: -0.5rem; }}
     table {{ border-collapse: collapse; width: 100%; margin-top: 1.5rem; }}
@@ -95,11 +100,17 @@ def generate_html(reports: dict[str, dict], output: Path) -> None:
     tr:hover td {{ filter: brightness(0.97); }}
     a {{ color: #0066cc; text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    nav a {{ color: #ccd6f6; }}
+    nav a:hover {{ color: #fff; }}
     .footer {{ margin-top: 2rem; font-size: 0.85rem; color: #999; text-align: center; }}
     small {{ font-size: 0.8em; color: #777; }}
   </style>
 </head>
 <body>
+  <nav>
+    <a class="active" href="/">Conformance</a>
+    <a href="/benchmarks/">Benchmarks</a>
+  </nav>
   <h1>model-signing Conformance Report</h1>
   <p class="subtitle">
     Conformance test results for OpenSSF Model Signing (OMS) language clients.

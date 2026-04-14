@@ -13,6 +13,11 @@ Protocol:
                [--public-key PEM] [--cert-chain PEM...]
                [--ignore-paths PATH...] [--ignore-unsigned-files]
 
+  capabilities
+             Prints a JSON object describing which optional benchmark flags
+             this adapter supports.  Used by the benchmark harness to skip
+             scenarios that require flags the underlying CLI does not expose.
+
 Translates to:
   python -m model_signing sign key --private_key KEY MODEL_PATH --signature BUNDLE
   python -m model_signing verify key --public_key KEY --signature BUNDLE MODEL_PATH
@@ -21,6 +26,7 @@ Translates to:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -119,6 +125,24 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return result.returncode
 
 
+def cmd_capabilities() -> int:
+    """Print the benchmark capabilities of this adapter as JSON.
+
+    The Python model_signing CLI (v1.x) does not expose performance-tuning
+    flags such as --hash-algorithm, --chunk-size, --max-workers, or
+    --shard-size via its CLI interface — these are internal library details.
+
+    When those flags are added to the upstream CLI, update the "flags" list
+    below and add the corresponding translation in cmd_sign().
+    """
+    caps = {
+        "flags": [],
+        "hash_algorithms": ["sha256", "blake2b", "blake3"],
+    }
+    print(json.dumps(caps))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="selftest-client",
@@ -151,10 +175,14 @@ def main() -> int:
     verify_parser.add_argument("--identity-provider")
     verify_parser.add_argument("--use-staging", action="store_true")
 
+    # capabilities — no flags, just prints JSON
+    subparsers.add_parser("capabilities")
+
     args = parser.parse_args()
 
-    # Remap hyphenated dest to underscore attrs for uniform access
-    if args.command == "sign-model":
+    if args.command == "capabilities":
+        return cmd_capabilities()
+    elif args.command == "sign-model":
         args.private_key = args.private_key
         args.signing_cert = args.signing_cert
         return cmd_sign(args)

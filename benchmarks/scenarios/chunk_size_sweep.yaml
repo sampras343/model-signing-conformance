@@ -1,0 +1,16 @@
+# Chunk size optimisation (ports exp_chunk.py).
+# Requires the adapter to support --chunk-size on sign-model.
+# chunk-size=0 means read each file whole (no chunking).
+name: chunk_size_sweep
+description: Signing throughput vs read chunk size
+operation: sign
+method: key
+requires_flags: ["--chunk-size"]
+
+model_shape: { size: 1GB, files: 1 }
+
+sweep:
+  chunk-size: [0, 4096, 65536, 1048576, 16777216, 268435456]
+
+repeat: 5
+ci_max_size: 100MB
