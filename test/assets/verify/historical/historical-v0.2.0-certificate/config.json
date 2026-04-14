@@ -2,5 +2,9 @@
   "description": "Backwards compatibility: certificate-signed bundle from Go v0.2.0 (first Sigstore bundle format)",
   "method": "certificate",
   "model_path": "model",
-  "cert_chain": ["keys/certificate/ca-cert.pem"]
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ]
+  }
 }

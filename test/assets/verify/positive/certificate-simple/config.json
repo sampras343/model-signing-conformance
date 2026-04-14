@@ -2,6 +2,12 @@
   "description": "Baseline certificate-based verification with 3-level PKI chain",
   "method": "certificate",
   "model": "models/simple",
-  "ignore_paths": ["ignore-me"],
-  "cert_chain": ["keys/certificate/ca-cert.pem"]
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ],
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
 }

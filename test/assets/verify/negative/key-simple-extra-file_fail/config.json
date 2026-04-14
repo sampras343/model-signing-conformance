@@ -2,9 +2,15 @@
   "description": "FAIL: Rejection when unsigned file exists in model directory (without --ignore-unsigned-files)",
   "method": "key",
   "model": "models/simple",
-  "ignore_paths": ["ignore-me"],
-  "public_key": "keys/certificate/signing-key-pub.pem",
   "model_modifications": {
-    "inject": {"injected.bin": "injected after signing\n"}
+    "inject": {
+      "injected.bin": "injected after signing\n"
+    }
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
   }
 }

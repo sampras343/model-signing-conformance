@@ -2,7 +2,13 @@
   "description": "Key roundtrip for a single-file model",
   "method": "key",
   "model": "models/single-file",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "expected_signed_files": ["model.bin"]
+  "expected_signed_files": [
+    "model.bin"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }

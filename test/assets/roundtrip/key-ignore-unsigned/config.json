@@ -2,9 +2,18 @@
   "description": "Roundtrip with --ignore-unsigned-files to tolerate files added after signing",
   "method": "key",
   "model": "models/simple",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "ignore_paths": ["ignore-me"],
-  "ignore_unsigned_files": true,
-  "expected_signed_files": ["signme-1", "signme-2"]
+  "expected_signed_files": [
+    "signme-1",
+    "signme-2"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ],
+    "ignore_unsigned_files": true
+  }
 }

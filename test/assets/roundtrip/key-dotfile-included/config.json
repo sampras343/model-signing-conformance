@@ -2,7 +2,15 @@
   "description": "Verifies non-git dotfiles (.config, .env.example) ARE signed and not mistakenly excluded",
   "method": "key",
   "model": "models/with-dotfiles",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "expected_signed_files": [".config", ".env.example", "model.bin"]
+  "expected_signed_files": [
+    ".config",
+    ".env.example",
+    "model.bin"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }

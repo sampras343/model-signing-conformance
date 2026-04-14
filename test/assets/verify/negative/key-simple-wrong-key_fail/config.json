@@ -2,6 +2,10 @@
   "description": "FAIL: Rejection when verification key does not match signing key",
   "method": "key",
   "model": "models/simple",
-  "ignore_paths": ["ignore-me"],
-  "public_key": "keys/wrong/wrong-key-pub.pem"
+  "verify": {
+    "public_key": "keys/wrong/wrong-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
 }

@@ -2,7 +2,13 @@
   "description": "Verifies .git, .github, .gitignore, .gitattributes are auto-excluded without explicit --ignore-paths",
   "method": "key",
   "model": "models/with-git-dir",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "expected_signed_files": ["model.bin"]
+  "expected_signed_files": [
+    "model.bin"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }

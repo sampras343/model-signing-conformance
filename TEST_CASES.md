@@ -603,6 +603,42 @@ These tests call `sign-model` followed immediately by `verify-model` within the 
 
 ---
 
+## Config Schema
+
+All test cases use a unified `config.json` schema with nested `sign` and `verify` blocks:
+
+```json
+{
+  "description": "What this test validates",
+  "method": "key|certificate|sigstore",
+  "model": "models/simple",
+
+  "sign": {
+    "private_key": "keys/.../signing-key.pem",
+    "signing_cert": "keys/.../signing-cert.pem",
+    "cert_chain": ["keys/.../int-ca-cert.pem"]
+  },
+
+  "verify": {
+    "public_key": "keys/.../signing-key-pub.pem",
+    "cert_chain": ["keys/.../ca-cert.pem"],
+    "ignore_paths": ["ignore-me"],
+    "ignore_unsigned_files": false
+  },
+
+  "expected_signed_files": ["file1", "file2"],
+  "model_modifications": { "tamper": {}, "delete": [], "inject": {} }
+}
+```
+
+**Key points:**
+- `sign` block: Only for roundtrip tests (signing parameters)
+- `verify` block: Required for all tests (verification parameters)
+- For certificate method: `sign.cert_chain` = intermediate CA(s), `verify.cert_chain` = root CA (trust anchor)
+- `model_modifications`: Only for verify negative tests (tamper/delete/inject files at runtime)
+
+---
+
 ## Test Count Summary
 
 | Category | Count |
