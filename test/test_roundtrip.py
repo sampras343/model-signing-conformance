@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from .client import ModelSigningClient, SignConfig, VerifyConfig
+from .client import ModelSigningClient, CaseConfig
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -27,7 +27,7 @@ def test_roundtrip(
     if not config_path.exists():
         pytest.fail(f"Missing config.json in {roundtrip_dir}")
 
-    cfg = SignConfig.from_json(config_path)
+    cfg = CaseConfig.from_json(config_path)
 
     # Copy model to tmp workspace
     model_src = ASSETS / cfg.model
@@ -54,26 +54,16 @@ def test_roundtrip(
     assert bundle_path.exists(), f"bundle.sig not created after signing for {roundtrip_dir.name}"
 
     # For ignore-unsigned tests: add an unsigned file after signing
-    if cfg.ignore_unsigned_files and cfg.ignore_paths:
+    verify_block = cfg.verify
+    if verify_block and verify_block.ignore_unsigned_files and verify_block.ignore_paths:
         (model_copy / "injected.bin").write_text("injected after signing\n")
 
-    # Build verify config — key paths are relative to ASSETS
-    verify_cfg = VerifyConfig(
-        method=cfg.method,
-        model_path=str(model_copy),
-        public_key=cfg.public_key,
-        cert_chain=cfg.cert_chain,
-        ignore_paths=cfg.ignore_paths,
-        ignore_unsigned_files=cfg.ignore_unsigned_files,
-        expected_signed_files=cfg.expected_signed_files,
-    )
-
-    # Verify (ignore_paths expanded to absolute by client.verify() against model_copy)
+    # Verify using the same config (verify block contains verification params)
     verify_result = client.verify(
         method=cfg.method,
         model_path=model_copy,
         bundle=bundle_path,
-        cfg=verify_cfg,
+        cfg=cfg,
         keys_root=ASSETS,
     )
     assert verify_result.returncode == 0, (

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from .client import ModelSigningClient, VerifyConfig
+from .client import ModelSigningClient, CaseConfig
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -38,7 +38,7 @@ def _load_xfail_reason(case_dir: Path) -> str | None:
 
 
 def _resolve_model(
-    cfg: VerifyConfig, verify_dir: Path, tmp_path: Path
+    cfg: CaseConfig, verify_dir: Path, tmp_path: Path
 ) -> Path:
     """Resolve model path, copying to temp dir if using shared models."""
     if cfg.model:
@@ -89,7 +89,7 @@ def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) ->
     config_path = verify_dir / "config.json"
     if not config_path.exists():
         pytest.fail(f"Missing config.json in {verify_dir}")
-    cfg = VerifyConfig.from_json(config_path)
+    cfg = CaseConfig.from_json(config_path)
 
     # Verify bundle exists
     bundle = verify_dir / "bundle.sig"

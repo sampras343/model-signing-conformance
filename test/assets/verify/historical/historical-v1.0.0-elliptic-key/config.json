@@ -2,5 +2,7 @@
   "description": "Backwards compatibility: key-signed bundle from Go v1.0.0 (first stable release)",
   "method": "key",
   "model_path": "model/signme-1",
-  "public_key": "keys/certificate/signing-key-pub.pem"
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }

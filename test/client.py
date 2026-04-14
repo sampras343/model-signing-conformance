@@ -37,64 +37,80 @@ class ModelModifications:
 
 
 @dataclass
-class VerifyConfig:
-    """Verification parameters loaded from a verify/ test case config.json."""
-    method: str
-    model_path: Optional[str] = None         # relative to test case dir (legacy)
-    model: Optional[str] = None              # relative to assets/ (new style)
-    public_key: Optional[str] = None         # relative to assets/keys/
+class SignBlock:
+    """Signing parameters within a config."""
+    private_key: Optional[str] = None
+    signing_cert: Optional[str] = None
+    cert_chain: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SignBlock":
+        return cls(
+            private_key=data.get("private_key"),
+            signing_cert=data.get("signing_cert"),
+            cert_chain=data.get("cert_chain", []),
+        )
+
+
+@dataclass
+class VerifyBlock:
+    """Verification parameters within a config."""
+    public_key: Optional[str] = None
     cert_chain: list[str] = field(default_factory=list)
     ignore_paths: list[str] = field(default_factory=list)
     ignore_unsigned_files: bool = False
-    expected_signed_files: Optional[list[str]] = None
-    model_modifications: Optional[ModelModifications] = None
 
     @classmethod
-    def from_json(cls, path: Path) -> "VerifyConfig":
-        data = json.loads(path.read_text())
-        mods = None
-        if "model_modifications" in data:
-            mods = ModelModifications.from_dict(data["model_modifications"])
+    def from_dict(cls, data: dict) -> "VerifyBlock":
         return cls(
-            method=data["method"],
-            model_path=data.get("model_path"),
-            model=data.get("model"),
             public_key=data.get("public_key"),
             cert_chain=data.get("cert_chain", []),
             ignore_paths=data.get("ignore_paths", []),
             ignore_unsigned_files=data.get("ignore_unsigned_files", False),
+        )
+
+
+@dataclass
+class CaseConfig:
+    """Unified test configuration for both verify and roundtrip tests."""
+    method: str
+    model: Optional[str] = None              # relative to assets/ (new style)
+    model_path: Optional[str] = None         # relative to test case dir (legacy)
+    sign: Optional[SignBlock] = None         # signing parameters (roundtrip only)
+    verify: Optional[VerifyBlock] = None     # verification parameters
+    expected_signed_files: Optional[list[str]] = None
+    model_modifications: Optional[ModelModifications] = None
+
+    @classmethod
+    def from_json(cls, path: Path) -> "CaseConfig":
+        data = json.loads(path.read_text())
+
+        # Parse nested blocks if present
+        sign_block = None
+        if "sign" in data:
+            sign_block = SignBlock.from_dict(data["sign"])
+
+        verify_block = None
+        if "verify" in data:
+            verify_block = VerifyBlock.from_dict(data["verify"])
+
+        mods = None
+        if "model_modifications" in data:
+            mods = ModelModifications.from_dict(data["model_modifications"])
+
+        return cls(
+            method=data["method"],
+            model=data.get("model"),
+            model_path=data.get("model_path"),
+            sign=sign_block,
+            verify=verify_block,
             expected_signed_files=data.get("expected_signed_files"),
             model_modifications=mods,
         )
 
 
-@dataclass
-class SignConfig:
-    """Sign parameters loaded from a roundtrip/ test case config.json."""
-    method: str
-    model: str                               # relative to test/assets/
-    private_key: Optional[str] = None        # relative to test/assets/
-    signing_cert: Optional[str] = None       # relative to test/assets/
-    cert_chain: list[str] = field(default_factory=list)
-    public_key: Optional[str] = None         # relative to test/assets/
-    ignore_paths: list[str] = field(default_factory=list)
-    ignore_unsigned_files: bool = False
-    expected_signed_files: Optional[list[str]] = None
-
-    @classmethod
-    def from_json(cls, path: Path) -> "SignConfig":
-        data = json.loads(path.read_text())
-        return cls(
-            method=data["method"],
-            model=data["model"],
-            private_key=data.get("private_key"),
-            signing_cert=data.get("signing_cert"),
-            cert_chain=data.get("cert_chain", []),
-            public_key=data.get("public_key"),
-            ignore_paths=data.get("ignore_paths", []),
-            ignore_unsigned_files=data.get("ignore_unsigned_files", False),
-            expected_signed_files=data.get("expected_signed_files"),
-        )
+# Aliases for convenience
+TestConfig = CaseConfig
 
 
 class ModelSigningClient:
@@ -112,7 +128,7 @@ class ModelSigningClient:
         method: str,
         model_path: Path,
         output_bundle: Path,
-        cfg: SignConfig,
+        cfg: CaseConfig,
         assets_root: Path,
     ) -> subprocess.CompletedProcess:
         args = [
@@ -121,16 +137,24 @@ class ModelSigningClient:
             "--model-path", str(model_path),
             "--output-bundle", str(output_bundle),
         ]
-        if cfg.private_key:
-            args += ["--private-key", str(assets_root / cfg.private_key)]
-        if cfg.signing_cert:
-            args += ["--signing-cert", str(assets_root / cfg.signing_cert)]
-        for cert in cfg.cert_chain:
-            args += ["--cert-chain", str(assets_root / cert)]
-        # Expand relative ignore path names to absolute paths within the model dir
-        for p in cfg.ignore_paths:
-            abs_p = str(model_path / p) if not Path(p).is_absolute() else p
-            args += ["--ignore-paths", abs_p]
+
+        # Get signing parameters from nested sign block
+        sign_block = cfg.sign
+        if sign_block:
+            if sign_block.private_key:
+                args += ["--private-key", str(assets_root / sign_block.private_key)]
+            if sign_block.signing_cert:
+                args += ["--signing-cert", str(assets_root / sign_block.signing_cert)]
+            for cert in sign_block.cert_chain:
+                args += ["--cert-chain", str(assets_root / cert)]
+
+        # Get ignore_paths from verify block (applies to both sign and verify)
+        verify_block = cfg.verify
+        if verify_block:
+            for p in verify_block.ignore_paths:
+                abs_p = str(model_path / p) if not Path(p).is_absolute() else p
+                args += ["--ignore-paths", abs_p]
+
         result = self._run(args)
         if result.returncode != 0:
             print(f"[sign stdout] {result.stdout}")
@@ -142,7 +166,7 @@ class ModelSigningClient:
         method: str,
         model_path: Path,
         bundle: Path,
-        cfg: VerifyConfig,
+        cfg: CaseConfig,
         keys_root: Path,
         ignore_paths_abs: list[str] | None = None,
     ) -> subprocess.CompletedProcess:
@@ -151,10 +175,10 @@ class ModelSigningClient:
         Args:
             model_path: Absolute path to the model directory or file.
             bundle: Absolute path to the bundle file.
-            cfg: Verification config (key paths relative to keys_root).
+            cfg: Test config with verify block (key paths relative to keys_root).
             keys_root: Root directory for resolving key/cert paths in cfg.
             ignore_paths_abs: Absolute paths to ignore. If None, derived from
-                cfg.ignore_paths by resolving relative names against model_path.
+                cfg.verify.ignore_paths by resolving relative names against model_path.
         """
         args = [
             "verify-model",
@@ -162,21 +186,26 @@ class ModelSigningClient:
             "--model-path", str(model_path),
             "--bundle", str(bundle),
         ]
-        if cfg.public_key:
-            args += ["--public-key", str(keys_root / cfg.public_key)]
-        for cert in cfg.cert_chain:
-            args += ["--cert-chain", str(keys_root / cert)]
 
-        # Resolve ignore paths to absolute paths
-        effective_ignore = ignore_paths_abs if ignore_paths_abs is not None else []
-        if not effective_ignore and cfg.ignore_paths:
-            model_dir = model_path if model_path.is_dir() else model_path.parent
-            effective_ignore = [str(model_dir / p) for p in cfg.ignore_paths]
-        for p in effective_ignore:
-            args += ["--ignore-paths", p]
+        # Get verification parameters from nested verify block
+        verify_block = cfg.verify
+        if verify_block:
+            if verify_block.public_key:
+                args += ["--public-key", str(keys_root / verify_block.public_key)]
+            for cert in verify_block.cert_chain:
+                args += ["--cert-chain", str(keys_root / cert)]
 
-        if cfg.ignore_unsigned_files:
-            args += ["--ignore-unsigned-files"]
+            # Resolve ignore paths to absolute paths
+            effective_ignore = ignore_paths_abs if ignore_paths_abs is not None else []
+            if not effective_ignore and verify_block.ignore_paths:
+                model_dir = model_path if model_path.is_dir() else model_path.parent
+                effective_ignore = [str(model_dir / p) for p in verify_block.ignore_paths]
+            for p in effective_ignore:
+                args += ["--ignore-paths", p]
+
+            if verify_block.ignore_unsigned_files:
+                args += ["--ignore-unsigned-files"]
+
         result = self._run(args)
         if result.returncode != 0:
             print(f"[verify stdout] {result.stdout}")

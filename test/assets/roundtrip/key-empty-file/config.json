@@ -2,7 +2,14 @@
   "description": "Key roundtrip on a model containing a zero-byte file",
   "method": "key",
   "model": "models/with-empty-file",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "expected_signed_files": ["empty.bin", "signme-1"]
+  "expected_signed_files": [
+    "empty.bin",
+    "signme-1"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }

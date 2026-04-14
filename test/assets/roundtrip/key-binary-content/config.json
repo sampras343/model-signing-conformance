@@ -2,7 +2,14 @@
   "description": "Signing and verification of models containing true binary data (arbitrary byte sequences)",
   "method": "key",
   "model": "models/binary-content",
-  "private_key": "keys/certificate/signing-key.pem",
-  "public_key": "keys/certificate/signing-key-pub.pem",
-  "expected_signed_files": ["header.bin", "weights.bin"]
+  "expected_signed_files": [
+    "header.bin",
+    "weights.bin"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
 }
