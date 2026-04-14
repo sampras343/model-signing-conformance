@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip for a single-file model",
   "method": "key",
   "model": "models/single-file",
   "private_key": "keys/certificate/signing-key.pem",

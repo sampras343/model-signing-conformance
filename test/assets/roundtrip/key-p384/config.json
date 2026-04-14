@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip using EC P-384 key (spec MUST support)",
   "method": "key",
   "model": "models/simple",
   "private_key": "keys/p384/signing-key.pem",

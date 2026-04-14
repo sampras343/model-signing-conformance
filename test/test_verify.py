@@ -1,10 +1,11 @@
 """Parametrized bundle verification tests.
 
-Each subdirectory in test/assets/verify/ is one test case.
-- Directories without a ``_fail`` suffix must verify successfully.
-- Directories with a ``_fail`` suffix must fail verification (non-zero exit).
+Test cases are organized in test/assets/verify/ under three categories:
+  - ``positive/``   — tests that must verify successfully (exit 0)
+  - ``negative/``   — tests that must fail verification (exit non-zero, ``_fail`` suffix)
+  - ``historical/`` — backwards compatibility tests for older bundle formats
 
-Each directory must contain:
+Each test case directory must contain:
   - ``config.json``  — verification parameters (see client.VerifyConfig)
   - ``bundle.sig``   — the pre-committed bundle to verify
 

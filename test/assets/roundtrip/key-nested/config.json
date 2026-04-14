@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip on a model with nested directory structure",
   "method": "key",
   "model": "models/multi-file",
   "private_key": "keys/certificate/signing-key.pem",

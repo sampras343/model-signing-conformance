@@ -1,4 +1,5 @@
 {
+  "description": "Certificate roundtrip with a self-signed certificate (no intermediate CA)",
   "method": "certificate",
   "model": "models/simple",
   "private_key": "keys/self-signed/signing-key.pem",

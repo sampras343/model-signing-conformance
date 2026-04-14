@@ -73,8 +73,18 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Parametrize verify_dir and roundtrip_dir from asset directory listings."""
     if "verify_dir" in metafunc.fixturenames:
         verify_root = ASSETS / "verify"
-        dirs = sorted(d for d in verify_root.iterdir() if d.is_dir())
-        metafunc.parametrize("verify_dir", dirs, ids=[d.name for d in dirs])
+        # Collect test cases from categorized subdirectories
+        categories = ["positive", "negative", "historical"]
+        dirs = []
+        ids = []
+        for category in categories:
+            category_dir = verify_root / category
+            if category_dir.exists():
+                for d in sorted(category_dir.iterdir()):
+                    if d.is_dir():
+                        dirs.append(d)
+                        ids.append(f"{category}/{d.name}")
+        metafunc.parametrize("verify_dir", dirs, ids=ids)
 
     if "roundtrip_dir" in metafunc.fixturenames:
         roundtrip_root = ASSETS / "roundtrip"

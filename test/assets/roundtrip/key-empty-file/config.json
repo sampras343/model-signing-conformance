@@ -1,4 +1,5 @@
 {
+  "description": "Key roundtrip on a model containing a zero-byte file",
   "method": "key",
   "model": "models/with-empty-file",
   "private_key": "keys/certificate/signing-key.pem",

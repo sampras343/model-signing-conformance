@@ -1,0 +1,7 @@
+{
+  "description": "Key verification when the model is a single file, not a directory",
+  "method": "key",
+  "model": "models/single-file",
+  "public_key": "keys/certificate/signing-key-pub.pem",
+  "expected_signed_files": ["model.bin"]
+}

@@ -1,5 +1,0 @@
-{
-  "method": "certificate",
-  "model_path": "model",
-  "cert_chain": ["keys/certificate/ca-cert.pem"]
-}

@@ -1,4 +1,5 @@
 {
+  "description": "Signing and verification of models containing true binary data (arbitrary byte sequences)",
   "method": "key",
   "model": "models/binary-content",
   "private_key": "keys/certificate/signing-key.pem",

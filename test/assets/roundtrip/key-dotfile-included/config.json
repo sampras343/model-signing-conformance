@@ -1,4 +1,5 @@
 {
+  "description": "Verifies non-git dotfiles (.config, .env.example) ARE signed and not mistakenly excluded",
   "method": "key",
   "model": "models/with-dotfiles",
   "private_key": "keys/certificate/signing-key.pem",

@@ -1,0 +1,7 @@
+{
+  "description": "Baseline key-based verification against a two-file model with ignore-paths",
+  "method": "key",
+  "model": "models/simple",
+  "ignore_paths": ["ignore-me"],
+  "public_key": "keys/certificate/signing-key-pub.pem"
+}
