@@ -1,0 +1,16 @@
+# Shard size optimisation (ports exp_shard.py).
+# Requires the adapter to support --shard-size on sign-model.
+# Larger shards reduce manifest size at the cost of finer-grained verification.
+name: shard_size_sweep
+description: Signing throughput and manifest size vs shard size
+operation: sign
+method: key
+requires_flags: ["--shard-size"]
+
+model_shape: { size: 10GB, files: 1 }
+
+sweep:
+  shard-size: [1048576, 10485760, 104857600, 1073741824]
+
+repeat: 3
+ci_max_size: 1GB

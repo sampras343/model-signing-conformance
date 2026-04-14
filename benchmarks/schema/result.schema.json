@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sampras343/model-signing-conformance/benchmarks/schema/result.schema.json",
+  "title": "BenchmarkResult",
+  "description": "A single benchmark result entry produced by the harness. Multiple entries are collected in a JSON array.",
+  "type": "object",
+  "required": ["client", "scenario", "operation", "parameters", "results", "system"],
+  "additionalProperties": false,
+  "properties": {
+    "client": {
+      "type": "string",
+      "description": "Adapter identifier, e.g. 'python', 'go'"
+    },
+    "client_version": {
+      "type": "string",
+      "description": "Client library/binary version if known, else empty string"
+    },
+    "scenario": {
+      "type": "string",
+      "description": "Name field from the scenario YAML file"
+    },
+    "operation": {
+      "enum": ["sign", "verify"],
+      "description": "Which operation was timed"
+    },
+    "parameters": {
+      "type": "object",
+      "description": "Exact parameter values used for this run",
+      "required": ["model_size_bytes", "file_count", "method"],
+      "additionalProperties": false,
+      "properties": {
+        "model_size_bytes": { "type": "integer" },
+        "file_count":       { "type": "integer" },
+        "method":           { "type": "string" },
+        "hash_algorithm":   { "type": ["string", "null"] },
+        "chunk_size":       { "type": ["integer", "null"] },
+        "max_workers":      { "type": ["integer", "null"] },
+        "shard_size":       { "type": ["integer", "null"] }
+      }
+    },
+    "results": {
+      "type": "object",
+      "required": ["repeat", "times_ms", "mean_ms", "min_ms", "stddev_ms", "throughput_mbps"],
+      "additionalProperties": false,
+      "properties": {
+        "repeat":          { "type": "integer", "minimum": 1 },
+        "times_ms":        { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "mean_ms":         { "type": "number" },
+        "min_ms":          { "type": "number" },
+        "stddev_ms":       { "type": "number" },
+        "throughput_mbps": { "type": "number" }
+      }
+    },
+    "system": {
+      "type": "object",
+      "required": ["cpu_count", "platform", "timestamp_utc"],
+      "additionalProperties": false,
+      "properties": {
+        "cpu_count":     { "type": "integer" },
+        "platform":      { "type": "string" },
+        "timestamp_utc": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Verify throughput across model sizes.
+# The harness signs each model once (untimed setup), then times N verifications.
+# Requires NO adapter flags beyond verify-model — works with every conformance adapter.
+name: verify_throughput
+description: End-to-end verification throughput across model sizes
+operation: verify
+method: key
+requires_flags: []
+
+sweep:
+  model_shape:
+    - { size: 10MB,  files: 1  }
+    - { size: 100MB, files: 1  }
+    - { size: 100MB, files: 10 }
+    - { size: 1GB,   files: 1  }
+
+# Number of timed repetitions per combination.
+repeat: 5
+
+ci_max_size: 100MB

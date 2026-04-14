@@ -1,0 +1,22 @@
+# Sign throughput across model sizes and file counts.
+# Requires NO adapter flags beyond sign-model — works with every conformance adapter.
+name: sign_throughput
+description: End-to-end signing throughput across model sizes and file counts
+operation: sign
+method: key
+requires_flags: []
+
+sweep:
+  model_shape:
+    - { size: 10MB,  files: 1  }
+    - { size: 100MB, files: 1  }
+    - { size: 100MB, files: 10 }
+    - { size: 1GB,   files: 1  }
+    - { size: 1GB,   files: 100 }
+
+# Number of timed repetitions per combination.
+repeat: 5
+
+# ci_max_size caps the largest model used when --ci is passed to run.py.
+# Rows whose size exceeds this are skipped in CI to keep runtime manageable.
+ci_max_size: 100MB

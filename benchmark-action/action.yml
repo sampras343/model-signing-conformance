@@ -1,0 +1,89 @@
+name: 'OMS Benchmark Harness'
+description: >
+  Run the OpenSSF Model Signing benchmark harness against a conformance adapter.
+  Produces a benchmark-results.json artifact that the conformance suite's
+  collect-benchmarks.yml workflow will pick up for the combined report.
+
+inputs:
+  entrypoint:
+    description: 'Absolute path to the conformance adapter binary or script'
+    required: true
+  private-key:
+    description: 'Absolute path to the private key PEM file for signing'
+    required: true
+  public-key:
+    description: 'Absolute path to the public key PEM file for verification'
+    required: true
+  scenarios-dir:
+    description: 'Absolute path to directory of scenario YAML files (defaults to bundled scenarios)'
+    required: false
+    default: ''
+  output:
+    description: 'Output JSON filename (written to github.workspace)'
+    required: false
+    default: 'benchmark-results.json'
+  ci:
+    description: 'Cap model sizes to ci_max_size defined in each scenario'
+    required: false
+    default: 'true'
+  python-version:
+    description: 'Python version to use for the harness'
+    required: false
+    default: '3.12'
+  conformance-ref:
+    description: 'Git ref of model-signing-conformance to use (tag, branch, or SHA)'
+    required: false
+    default: 'main'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check out conformance harness
+      uses: actions/checkout@v4
+      with:
+        repository: sampras343/model-signing-conformance
+        ref: ${{ inputs.conformance-ref }}
+        path: _conformance
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install benchmark harness dependencies
+      shell: bash
+      run: pip install pyyaml psutil py-cpuinfo
+
+    - name: Resolve scenarios directory
+      id: scenarios
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.scenarios-dir }}" ]; then
+          echo "dir=${{ inputs.scenarios-dir }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "dir=${{ github.workspace }}/_conformance/benchmarks/scenarios" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Run benchmark harness
+      shell: bash
+      run: |
+        CI_FLAG=""
+        if [ "${{ inputs.ci }}" = "true" ]; then
+          CI_FLAG="--ci"
+        fi
+        # cd into the conformance checkout so `python -m benchmarks.harness.run` resolves.
+        # All other paths (entrypoint, keys, output) must be absolute — documented in inputs.
+        cd "${{ github.workspace }}/_conformance"
+        python -m benchmarks.harness.run \
+          --entrypoint "${{ inputs.entrypoint }}" \
+          --scenarios  "${{ steps.scenarios.outputs.dir }}" \
+          --private-key "${{ inputs.private-key }}" \
+          --public-key  "${{ inputs.public-key }}" \
+          --output      "${{ github.workspace }}/${{ inputs.output }}" \
+          $CI_FLAG
+
+    - name: Upload benchmark results artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: ${{ inputs.output }}
+        if-no-files-found: warn
