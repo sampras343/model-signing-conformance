@@ -14,6 +14,10 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from benchmarks.harness.run import KeyMaterial
 
 
 def build_sign_cmd(
@@ -67,23 +71,14 @@ def build_benchmark_cmd(
     bundle_path: Path | None,
     operation: str,
     method: str,
-    key: str,
+    keys: KeyMaterial,
     repeat: int,
     extra_flags: list[str] = (),
-    signing_cert: str = "",
-    cert_chain: list[str] | None = None,
 ) -> list[str]:
     """Return the argv list for a benchmark-model invocation.
 
-    Args:
-        operation:    "hash", "sign", or "verify"
-        method:       "key" or "certificate" (ignored for "hash")
-        key:          private key path (sign); public key path (key verify).
-                      Pass "" to omit the flag (e.g. certificate verify, hash).
-        signing_cert: signing certificate PEM path (certificate sign only).
-        cert_chain:   certificate chain PEM paths (certificate verify/sign).
-        bundle_path:  output bundle for sign; existing bundle for verify.
-                      None or ignored for "hash".
+    Uses KeyMaterial to derive key paths and method-specific flags,
+    keeping this function consistent with how run.py works.
     """
     cmd = [
         entrypoint, "benchmark-model",
@@ -91,21 +86,15 @@ def build_benchmark_cmd(
         "--model-path", str(model_path),
         "--repeat", str(repeat),
     ]
-    # hash operation: method-independent, no bundle, no key material.
     if operation != "hash":
         cmd += ["--method", method]
         if bundle_path is not None:
             bundle_flag = "--output-bundle" if operation == "sign" else "--bundle"
             cmd += [bundle_flag, str(bundle_path)]
-        # Key flag: private-key for sign; public-key for key-verify.
-        # Certificate verify and hash have no public key — omit when empty.
+        key = keys.sign_key(method) if operation == "sign" else keys.verify_key(method)
         if key:
             key_flag = "--private-key" if operation == "sign" else "--public-key"
             cmd += [key_flag, key]
-        if signing_cert:
-            cmd += ["--signing-cert", signing_cert]
-        for cert in (cert_chain or []):
-            cmd += ["--cert-chain", cert]
     cmd += list(extra_flags)
     return cmd
 
@@ -113,14 +102,12 @@ def build_benchmark_cmd(
 def run_benchmark(
     entrypoint: str,
     model_path: Path,
-    bundle_path: Path,
+    bundle_path: Path | None,
     operation: str,
     method: str,
-    key: str,
+    keys: KeyMaterial,
     repeat: int,
     extra_flags: list[str] = (),
-    signing_cert: str = "",
-    cert_chain: list[str] | None = None,
 ) -> tuple[list[float], str]:
     """Call benchmark-model and return (times_ms, error_string).
 
@@ -129,8 +116,7 @@ def run_benchmark(
         {"times_ms": [123.4, 121.8, ...]}
     """
     cmd = build_benchmark_cmd(entrypoint, model_path, bundle_path,
-                               operation, method, key, repeat, extra_flags,
-                               signing_cert=signing_cert, cert_chain=cert_chain)
+                               operation, method, keys, repeat, extra_flags)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
@@ -141,6 +127,8 @@ def run_benchmark(
 
     try:
         data = json.loads(result.stdout)
+        if "error" in data and "times_ms" not in data:
+            return [], data["error"]
         times = [float(t) for t in data["times_ms"]]
         return times, ""
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:

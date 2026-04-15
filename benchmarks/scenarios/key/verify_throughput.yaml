@@ -1,7 +1,7 @@
 # Verify throughput across model sizes.
 # The harness signs each model once (untimed setup), then times N verifications.
 # Requires NO adapter flags beyond verify-model — works with every conformance adapter.
-name: verify_throughput
+name: key_verify_throughput
 description: End-to-end verification throughput across model sizes
 operation: verify
 method: key
