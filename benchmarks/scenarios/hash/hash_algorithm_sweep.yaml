@@ -1,0 +1,22 @@
+# Hash algorithm throughput comparison (ports exp_hash.py).
+# Measures only the canonicalization step — no signing overhead.
+# Requires the adapter to support --hash-algorithm on benchmark-model.
+name: hash_algorithm_sweep
+description: Hashing throughput by hash algorithm
+operation: hash
+requires_flags: ["--hash-algorithm"]
+
+model_shape: { size: 1GB, files: 1 }
+
+sweep:
+  # blake2b is the standard identifier used across Go and Python adapters.
+  # blake3 is Python-only — add a separate scenario to benchmark it exclusively.
+  hash-algorithm: ["sha256", "blake2b"]
+
+repeat: 5
+ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+# hash_algorithm is swept so its value is set per row, not here.
+defaults:
+  serialization: file

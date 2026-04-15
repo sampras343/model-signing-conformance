@@ -30,6 +30,7 @@ import json
 import os
 import subprocess
 import sys
+import timeit
 
 
 def _python() -> str:
@@ -125,6 +126,127 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return result.returncode
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    """In-process benchmark timing — eliminates per-iteration subprocess startup.
+
+    Imports model_signing directly and calls sign/verify N times in a
+    timeit loop.  The key material is loaded once before the loop so that
+    timing measures only hashing + crypto + I/O, not key parsing.
+
+    Output (stdout): {"times_ms": [123.4, 121.8, ...]}
+    """
+    try:
+        from model_signing import hashing as ms_hashing
+        from model_signing import signing as ms_signing
+        from model_signing import verifying as ms_verifying
+    except ImportError as exc:
+        print(f"ERROR: model_signing not importable: {exc}", file=sys.stderr)
+        return 1
+
+    operation = args.operation
+    model_path = args.model_path
+    repeat = args.repeat
+
+    # Python model_signing uses 'blake2' where the harness uses 'blake2b'.
+    _ALGO_MAP = {"blake2b": "blake2"}
+    hash_algo = _ALGO_MAP.get(args.hash_algorithm or "sha256", args.hash_algorithm or "sha256")
+    chunk_size = args.chunk_size or 1048576
+    max_workers = args.max_workers or None
+
+    method = args.method
+
+    if operation == "hash":
+        # Method-independent: measures hashing and serialization only.
+        # Selects shard serialization when --shard-size is given, otherwise file.
+        shard_size = args.shard_size or 0
+        if shard_size > 0:
+            h_config = ms_hashing.Config().use_shard_serialization(
+                hashing_algorithm=hash_algo,
+                shard_size=shard_size,
+                chunk_size=chunk_size,
+                max_workers=max_workers,
+            )
+        else:
+            h_config = ms_hashing.Config().use_file_serialization(
+                hashing_algorithm=hash_algo,
+                chunk_size=chunk_size,
+                max_workers=max_workers,
+            )
+
+        def do_hash() -> None:
+            h_config.hash(model_path)
+
+        do_hash()  # warmup
+        times_sec = timeit.repeat(do_hash, number=1, repeat=repeat)
+
+    elif operation == "sign":
+        if not args.private_key:
+            print("ERROR: --private-key required for sign", file=sys.stderr)
+            return 2
+        bundle_path = args.output_bundle
+
+        if method == "key":
+            config = ms_signing.Config().use_elliptic_key_signer(
+                private_key=args.private_key
+            )
+        elif method == "certificate":
+            if not args.signing_cert:
+                print("ERROR: --signing-cert required for certificate sign", file=sys.stderr)
+                return 2
+            config = ms_signing.Config().use_certificate_signer(
+                private_key=args.private_key,
+                signing_certificate=args.signing_cert,
+                certificate_chain=args.cert_chain or [],
+            )
+        else:
+            print(f"ERROR: method '{method}' not supported for in-process benchmark", file=sys.stderr)
+            return 2
+
+        def do_sign() -> None:
+            try:
+                os.unlink(bundle_path)
+            except FileNotFoundError:
+                pass
+            config.sign(model_path, bundle_path)
+
+        # One warmup run to warm the OS page cache before timing.
+        do_sign()
+        times_sec = timeit.repeat(do_sign, number=1, repeat=repeat)
+
+    elif operation == "verify":
+        bundle_path = args.bundle
+
+        if method == "key":
+            if not args.public_key:
+                print("ERROR: --public-key required for key verify", file=sys.stderr)
+                return 2
+            v_config = ms_verifying.Config().use_elliptic_key_verifier(
+                public_key=args.public_key
+            )
+        elif method == "certificate":
+            v_config = ms_verifying.Config().use_certificate_verifier(
+                certificate_chain=args.cert_chain or [],
+            )
+        else:
+            print(f"ERROR: method '{method}' not supported for in-process benchmark", file=sys.stderr)
+            return 2
+
+        def do_verify() -> None:
+            v_config.verify(model_path, bundle_path)
+
+        # One warmup run before timing.
+        do_verify()
+        times_sec = timeit.repeat(do_verify, number=1, repeat=repeat)
+
+    else:
+        print(f"ERROR: unknown operation '{operation}'", file=sys.stderr)
+        return 2
+
+    times_ms = [round(t * 1000, 3) for t in times_sec]
+    print(json.dumps({"times_ms": times_ms}))
+    return 0
+
+
 def cmd_capabilities() -> int:
     """Print the benchmark capabilities of this adapter as JSON.
 
@@ -138,6 +260,7 @@ def cmd_capabilities() -> int:
     caps = {
         "flags": [],
         "hash_algorithms": ["sha256", "blake2b", "blake3"],
+        "benchmark_model": True,
     }
     print(json.dumps(caps))
     return 0
@@ -178,6 +301,30 @@ def main() -> int:
     # capabilities — no flags, just prints JSON
     subparsers.add_parser("capabilities")
 
+    # benchmark-model — in-process timing loop
+    bench_parser = subparsers.add_parser("benchmark-model")
+    bench_parser.add_argument("--operation", required=True, choices=["sign", "verify"])
+    bench_parser.add_argument("--method", required=True, choices=["key", "certificate", "sigstore"])
+    bench_parser.add_argument("--model-path", required=True)
+    bench_parser.add_argument("--output-bundle", help="Output bundle path (sign)")
+    bench_parser.add_argument("--bundle", help="Existing bundle path (verify)")
+    bench_parser.add_argument("--private-key", help="Private key PEM (sign, key and certificate methods)")
+    bench_parser.add_argument("--public-key", help="Public key PEM (verify, key method)")
+    bench_parser.add_argument("--signing-cert", dest="signing_cert",
+                              help="Signing certificate PEM (sign, certificate method)")
+    bench_parser.add_argument("--cert-chain", dest="cert_chain", action="append", default=[],
+                              help="Certificate chain PEM (verify, certificate method; repeat for multiple)")
+    bench_parser.add_argument("--repeat", type=int, default=5)
+    # Hashing tuning flags — used by operation:hash and forwarded by sweep scenarios.
+    bench_parser.add_argument("--hash-algorithm", default="",
+                              help="Hash algorithm: sha256|blake2b|blake3")
+    bench_parser.add_argument("--shard-size", type=int, default=0,
+                              help="Shard size in bytes (0 = file serialization)")
+    bench_parser.add_argument("--chunk-size", type=int, default=0,
+                              help="Read chunk size in bytes (0 = library default)")
+    bench_parser.add_argument("--max-workers", type=int, default=0,
+                              help="Max parallel workers (0 = library default)")
+
     args = parser.parse_args()
 
     if args.command == "capabilities":
@@ -189,6 +336,8 @@ def main() -> int:
     elif args.command == "verify-model":
         args.public_key = args.public_key
         return cmd_verify(args)
+    elif args.command == "benchmark-model":
+        return cmd_benchmark(args)
     return 1
 
 

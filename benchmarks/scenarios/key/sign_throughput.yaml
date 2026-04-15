@@ -20,3 +20,9 @@ repeat: 5
 # ci_max_size caps the largest model used when --ci is passed to run.py.
 # Rows whose size exceeds this are skipped in CI to keep runtime manageable.
 ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+# These are not passed as adapter flags — they document what the adapter uses by default.
+defaults:
+  hash_algorithm: sha256
+  serialization: file

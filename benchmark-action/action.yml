@@ -38,6 +38,16 @@ inputs:
     description: 'Absolute path to the model-signing binary (passed as MODEL_SIGNING_BIN to the adapter)'
     required: false
     default: ''
+  signing-cert:
+    description: 'Absolute path to the signing certificate PEM (required for certificate-method scenarios)'
+    required: false
+    default: ''
+  cert-chain:
+    description: >
+      Space-separated absolute paths to certificate chain PEM files
+      (e.g. "path/to/int-ca.pem path/to/ca.pem"). Required for certificate-method scenarios.
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -78,12 +88,22 @@ runs:
         fi
         # cd into the conformance checkout so `python -m benchmarks.harness.run` resolves.
         # All other paths (entrypoint, keys, output) must be absolute — documented in inputs.
+        # Build optional certificate flags.
+        CERT_FLAGS=""
+        if [ -n "${{ inputs.signing-cert }}" ]; then
+          CERT_FLAGS="$CERT_FLAGS --signing-cert ${{ inputs.signing-cert }}"
+        fi
+        for cert in ${{ inputs.cert-chain }}; do
+          CERT_FLAGS="$CERT_FLAGS --cert-chain $cert"
+        done
+
         cd "${{ github.workspace }}/_conformance"
         python -m benchmarks.harness.run \
           --entrypoint "${{ inputs.entrypoint }}" \
           --scenarios  "${{ steps.scenarios.outputs.dir }}" \
           --private-key "${{ inputs.private-key }}" \
           --public-key  "${{ inputs.public-key }}" \
+          $CERT_FLAGS \
           --output      "${{ github.workspace }}/${{ inputs.output }}" \
           $CI_FLAG
 

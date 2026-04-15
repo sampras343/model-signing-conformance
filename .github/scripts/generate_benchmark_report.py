@@ -61,7 +61,7 @@ def _param_summary(params: dict) -> str:
     fc = params.get("file_count", 1)
     if fc != 1:
         parts.append(f"{fc} files")
-    for key in ("hash_algorithm", "chunk_size", "max_workers", "shard_size"):
+    for key in ("hash_algorithm", "serialization", "chunk_size", "max_workers", "shard_size"):
         val = params.get(key)
         if val is not None:
             parts.append(f"{key}={val}")
@@ -212,8 +212,8 @@ def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
 </head>
 <body>
   <nav>
-    <a href="/">Conformance</a>
-    <a class="active" href="/benchmarks/">Benchmarks</a>
+    <a href="../">Conformance</a>
+    <a class="active" href="./">Benchmarks</a>
   </nav>
   <h1>OpenSSF Model Signing — Benchmark Report</h1>
   <p>

@@ -1,0 +1,30 @@
+# Certificate verification throughput across model sizes.
+# The harness signs each model once with certificate method (untimed setup),
+# then times N verifications.
+# Mirrors key/verify_throughput.yaml but uses certificate-based verification.
+#
+# Key material is supplied at runtime via the harness CLI:
+#   --signing-cert   path/to/signing-key-cert.pem    (used for the sign setup step)
+#   --cert-chain     path/to/int-ca-cert.pem
+#   --cert-chain     path/to/ca-cert.pem
+name: certificate_verify_throughput
+description: End-to-end certificate verification throughput across model sizes
+operation: verify
+method: certificate
+requires_flags: []
+
+sweep:
+  model_shape:
+    - { size: 10MB,  files: 1  }
+    - { size: 100MB, files: 1  }
+    - { size: 100MB, files: 10 }
+    - { size: 1GB,   files: 1  }
+
+repeat: 5
+
+ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+defaults:
+  hash_algorithm: sha256
+  serialization: file
