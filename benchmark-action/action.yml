@@ -48,6 +48,13 @@ inputs:
       (e.g. "path/to/int-ca.pem path/to/ca.pem"). Required for certificate-method scenarios.
     required: false
     default: ''
+  certificate-private-key:
+    description: >
+      Absolute path to the private key PEM used for certificate-method signing.
+      Defaults to private-key if not set (only needed when the cert key pair
+      differs from the p384 signing key).
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -96,6 +103,9 @@ runs:
         for cert in ${{ inputs.cert-chain }}; do
           CERT_FLAGS="$CERT_FLAGS --cert-chain $cert"
         done
+        if [ -n "${{ inputs.certificate-private-key }}" ]; then
+          CERT_FLAGS="$CERT_FLAGS --certificate-private-key ${{ inputs.certificate-private-key }}"
+        fi
 
         cd "${{ github.workspace }}/_conformance"
         python -m benchmarks.harness.run \

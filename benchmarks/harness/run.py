@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,59 @@ from benchmarks.harness.adapter import (
     build_sign_cmd, build_verify_cmd, query_capabilities, run_benchmark,
 )
 from benchmarks.harness.generate import main as generate_main, _parse_size
+
+
+# ---------------------------------------------------------------------------
+# Key material
+# ---------------------------------------------------------------------------
+
+@dataclass
+class KeyMaterial:
+    """All crypto material needed to run benchmark scenarios.
+
+    Centralises method-specific key paths so callers pass one object instead
+    of N positional strings.  Adding a new method (e.g. sigstore) only
+    requires adding fields here and updating sign_key() / extra_flags() —
+    no function signatures change.
+    """
+
+    # key method
+    private_key: str = ""
+    public_key: str = ""
+
+    # certificate method — certificate's own EC key pair
+    certificate_private_key: str = ""
+    signing_cert: str = ""
+    cert_chain: list[str] = field(default_factory=list)
+
+    # sigstore method (future)
+    identity_token: str = ""
+    identity_provider: str = ""
+
+    def sign_key(self, method: str) -> str:
+        """Return the private key path appropriate for the given signing method."""
+        if method == "certificate":
+            return self.certificate_private_key or self.private_key
+        # key method (and future methods) fall back to private_key
+        return self.private_key
+
+    def verify_key(self, method: str) -> str:
+        """Return the public key path for verification (empty for cert/sigstore)."""
+        if method == "key":
+            return self.public_key
+        return ""
+
+    def extra_flags(self, method: str) -> list[str]:
+        """Return adapter flags that inject method-specific material into every call."""
+        if method == "certificate":
+            flags: list[str] = []
+            if self.signing_cert:
+                flags += ["--signing-cert", self.signing_cert]
+            for cert in self.cert_chain:
+                flags += ["--cert-chain", cert]
+            return flags
+        # sigstore: identity_token / identity_provider injected here once added
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -358,11 +412,76 @@ def _print_row(result: dict) -> None:
 # Main runner
 # ---------------------------------------------------------------------------
 
+def _run_row(
+    entrypoint: str,
+    operation: str,
+    method: str,
+    model_path: Path,
+    bundle_path: Path,
+    keys: KeyMaterial,
+    repeat: int,
+    row_flags: list[str],
+    use_inproc: bool,
+) -> tuple[list[float], list[str]]:
+    """Execute one benchmark row; return (times_ms, errors)."""
+    errors: list[str] = []
+
+    if use_inproc:
+        if operation == "hash":
+            times, err = run_benchmark(
+                entrypoint, model_path, None, "hash", "", "", repeat, row_flags,
+            )
+            if err:
+                errors.append(err)
+
+        elif operation == "sign":
+            times, err = run_benchmark(
+                entrypoint, model_path, bundle_path, "sign",
+                method, keys.sign_key(method), repeat, row_flags,
+                signing_cert=keys.signing_cert, cert_chain=keys.cert_chain,
+            )
+            if err:
+                errors.append(err)
+
+        elif operation == "verify":
+            if not _sign_once(entrypoint, model_path, bundle_path,
+                              method, keys.sign_key(method), row_flags):
+                return [], ["SETUP FAILED (sign step)"]
+            times, err = run_benchmark(
+                entrypoint, model_path, bundle_path, "verify",
+                method, keys.verify_key(method), repeat, row_flags,
+                cert_chain=keys.cert_chain,
+            )
+            if err:
+                errors.append(err)
+
+        else:
+            return [], [f"unknown operation '{operation}'"]
+
+    else:
+        if operation == "sign":
+            times, errors = _bench_sign(
+                entrypoint, model_path, bundle_path, method,
+                keys.sign_key(method), repeat, row_flags,
+            )
+        elif operation == "verify":
+            if not _sign_once(entrypoint, model_path, bundle_path,
+                              method, keys.sign_key(method), row_flags):
+                return [], ["SETUP FAILED (sign step)"]
+            times, errors = _bench_verify(
+                entrypoint, model_path, bundle_path, method,
+                keys.verify_key(method), repeat, row_flags,
+            )
+        else:
+            return [], [f"unknown operation '{operation}'"]
+
+    return times, errors
+
+
 def run_scenario(
     scenario: dict,
     entrypoint: str,
-    private_key: str,
-    public_key: str,
+    keys: KeyMaterial,
     capabilities: dict,
     ci: bool,
     tmp_dir: Path,
@@ -379,105 +498,43 @@ def run_scenario(
     operation = scenario["operation"]
     method = scenario.get("method", "")  # empty for operation:hash
 
-    # hash operation requires in-process timing (no standalone CLI command exists).
     if operation == "hash" and not capabilities.get("benchmark_model"):
         print(f"  [skip] {name}: operation:hash requires benchmark_model capability")
         return []
+
     repeat = scenario.get("repeat", 5)
     rows = _expand_sweep(scenario, ci)
-
     if not rows:
         print(f"  [skip] {name}: all rows filtered by ci_max_size")
         return []
 
-    results = []
     client = _adapter_name(entrypoint)
     use_inproc = capabilities.get("benchmark_model", False)
+    # Method-specific flags (cert material, future sigstore token, etc.) are
+    # prepended to every row's flags so _run_row stays method-agnostic.
+    method_flags = keys.extra_flags(method)
 
-    # For certificate method: build extra flags that inject cert material into
-    # every adapter invocation (both timed and untimed setup calls).
-    cert_extra_flags: list[str] = []
-    if method == "certificate":
-        if signing_cert:
-            cert_extra_flags += ["--signing-cert", signing_cert]
-        for cert in (cert_chain or []):
-            cert_extra_flags += ["--cert-chain", cert]
-
+    results = []
     for idx, row in enumerate(rows):
         label = _fmt_size(row["size_bytes"])
-        if row["sweep_param"]:
-            label += f" {row['sweep_param']}={row['sweep_value']}"
-        else:
-            label += f" x {row['files']} file(s)"
+        label += (f" {row['sweep_param']}={row['sweep_value']}"
+                  if row["sweep_param"] else f" x {row['files']} file(s)")
         mode = "inproc" if use_inproc else "subprocess"
         print(f"  {name} / {operation} / {label} [{mode}] ...", end=" ", flush=True)
 
         model_path = _generate_model(tmp_dir, row["size"], row["files"], idx)
         bundle_path = tmp_dir / f"bundle_{idx}.sig"
+        row_flags = method_flags + row["extra_flags"]
 
-        errors: list[str] = []
-
-        # Merge scenario cert flags with per-row sweep flags.
-        row_flags = cert_extra_flags + row["extra_flags"]
-
-        if use_inproc:
-            # Adapter handles its own timing loop in-process — one subprocess call
-            # per scenario row. Eliminates per-iteration startup overhead.
-            if operation == "hash":
-                times, err = run_benchmark(
-                    entrypoint, model_path, None, "hash",
-                    "", "", repeat, row_flags,
-                )
-                if err:
-                    errors.append(err)
-            elif operation == "sign":
-                times, err = run_benchmark(
-                    entrypoint, model_path, bundle_path, "sign",
-                    method, private_key, repeat, row_flags,
-                    signing_cert=signing_cert, cert_chain=cert_chain,
-                )
-                if err:
-                    errors.append(err)
-            elif operation == "verify":
-                if not _sign_once(entrypoint, model_path, bundle_path,
-                                  method, private_key, row_flags):
-                    print("SETUP FAILED (sign step)")
-                    continue
-                # Certificate verify uses cert chain — no public key concept.
-                verify_key = "" if method == "certificate" else public_key
-                times, err = run_benchmark(
-                    entrypoint, model_path, bundle_path, "verify",
-                    method, verify_key, repeat, row_flags,
-                    cert_chain=cert_chain,
-                )
-                if err:
-                    errors.append(err)
-            else:
-                print(f"unknown operation '{operation}', skipping")
-                continue
-        else:
-            # Fallback: separate subprocess per timed iteration.
-            if operation == "sign":
-                times, errors = _bench_sign(
-                    entrypoint, model_path, bundle_path, method,
-                    private_key, repeat, row_flags,
-                )
-            elif operation == "verify":
-                if not _sign_once(entrypoint, model_path, bundle_path,
-                                  method, private_key, row_flags):
-                    print("SETUP FAILED (sign step)")
-                    continue
-                # Certificate verify: no public key, cert chain is in row_flags.
-                verify_key = "" if method == "certificate" else public_key
-                times, errors = _bench_verify(
-                    entrypoint, model_path, bundle_path, method,
-                    verify_key, repeat, row_flags,
-                )
-            else:
-                print(f"unknown operation '{operation}', skipping")
-                continue
+        times, errors = _run_row(
+            entrypoint, operation, method, model_path, bundle_path,
+            keys, repeat, row_flags, use_inproc,
+        )
 
         if errors:
+            if errors == ["SETUP FAILED (sign step)"]:
+                print("SETUP FAILED (sign step)")
+                continue
             print(f"ERRORS ({len(errors)}/{repeat} runs failed):")
             for e in errors[:3]:
                 print(f"    {e}")
@@ -509,22 +566,35 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.add_argument("--entrypoint", required=True,
                         help="Path to the conformance adapter binary/script")
-    parser.add_argument("--private-key", required=True,
-                        help="Private key PEM (e.g. test/assets/keys/p384/signing-key.pem)")
-    parser.add_argument("--public-key", required=True,
-                        help="Public key PEM for key-method verification")
-    parser.add_argument("--signing-cert", default="",
-                        help="Signing certificate PEM for certificate-method scenarios")
-    parser.add_argument("--cert-chain", action="append", default=[],
-                        metavar="PEM",
-                        help="Certificate chain PEM for certificate-method scenarios "
-                             "(repeat for multiple: --cert-chain int-ca.pem --cert-chain ca.pem)")
+    # Key material — grouped here; builds a KeyMaterial in main().
+    key_group = parser.add_argument_group("key material")
+    key_group.add_argument("--private-key", required=True,
+                           help="Private key PEM for key-method signing "
+                                "(e.g. test/assets/keys/p384/signing-key.pem)")
+    key_group.add_argument("--public-key", required=True,
+                           help="Public key PEM for key-method verification")
+    key_group.add_argument("--signing-cert", default="",
+                           help="Signing certificate PEM (certificate method)")
+    key_group.add_argument("--cert-chain", action="append", default=[],
+                           metavar="PEM",
+                           help="Certificate chain PEM (certificate method; repeat for multiple)")
+    key_group.add_argument("--certificate-private-key", default="",
+                           help="Private key PEM for certificate-method signing "
+                                "(defaults to --private-key if not set)")
     parser.add_argument("--output", required=True,
                         help="Output JSON file (array of result objects)")
     parser.add_argument("--ci", action="store_true",
                         help="Cap model sizes to ci_max_size defined in each scenario")
 
     args = parser.parse_args(argv)
+
+    keys = KeyMaterial(
+        private_key=args.private_key,
+        public_key=args.public_key,
+        certificate_private_key=args.certificate_private_key,
+        signing_cert=args.signing_cert,
+        cert_chain=args.cert_chain,
+    )
 
     scenario_files = (
         [Path(args.scenario)]
@@ -556,8 +626,7 @@ def main(argv: list[str] | None = None) -> int:
             results = run_scenario(
                 scenario=scenario,
                 entrypoint=args.entrypoint,
-                private_key=args.private_key,
-                public_key=args.public_key,
+                keys=keys,
                 capabilities=capabilities,
                 ci=args.ci,
                 tmp_dir=tmp_dir,
