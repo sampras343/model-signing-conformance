@@ -1,0 +1,21 @@
+# Worker count vs hashing throughput (ports exp_worker.py).
+# Measures only the canonicalization step — no signing overhead.
+# Uses a multi-file model so parallelism has meaningful work to distribute.
+# Requires the adapter to support --max-workers on benchmark-model.
+name: worker_count_sweep
+description: Hashing throughput vs worker count (parallelisation scaling)
+operation: hash
+requires_flags: ["--max-workers"]
+
+model_shape: { size: 1GB, files: 100 }
+
+sweep:
+  max-workers: [1, 2, 4, 8, 16, 32]
+
+repeat: 3
+ci_max_size: { size: 100MB, files: 10 }
+
+# Default parameter values recorded in results for every row.
+defaults:
+  hash_algorithm: sha256
+  serialization: file

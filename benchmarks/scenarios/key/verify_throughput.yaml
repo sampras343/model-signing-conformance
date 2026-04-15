@@ -18,3 +18,8 @@ sweep:
 repeat: 5
 
 ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+defaults:
+  hash_algorithm: sha256
+  serialization: file

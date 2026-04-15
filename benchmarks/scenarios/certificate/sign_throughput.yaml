@@ -1,0 +1,31 @@
+# Certificate signing throughput across model sizes.
+# Mirrors key/sign_throughput.yaml but uses certificate-based signing.
+# Requires NO adapter flags beyond sign-model — works with every conformance adapter
+# that supports certificate signing.
+#
+# Key material is supplied at runtime via the harness CLI:
+#   --signing-cert   path/to/signing-key-cert.pem
+#   --cert-chain     path/to/int-ca-cert.pem
+#   --cert-chain     path/to/ca-cert.pem
+name: certificate_sign_throughput
+description: End-to-end certificate signing throughput across model sizes
+operation: sign
+method: certificate
+requires_flags: []
+
+sweep:
+  model_shape:
+    - { size: 10MB,  files: 1  }
+    - { size: 100MB, files: 1  }
+    - { size: 100MB, files: 10 }
+    - { size: 1GB,   files: 1  }
+    - { size: 1GB,   files: 100 }
+
+repeat: 5
+
+ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+defaults:
+  hash_algorithm: sha256
+  serialization: file

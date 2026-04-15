@@ -42,7 +42,9 @@ from typing import Any
 
 import yaml
 
-from benchmarks.harness.adapter import build_sign_cmd, build_verify_cmd, query_capabilities
+from benchmarks.harness.adapter import (
+    build_sign_cmd, build_verify_cmd, query_capabilities, run_benchmark,
+)
 from benchmarks.harness.generate import main as generate_main, _parse_size
 
 
@@ -219,6 +221,10 @@ def _expand_sweep(scenario: dict, ci: bool) -> list[dict]:
     """Return one parameter dict per benchmark row."""
     ci_cap = _ci_cap_bytes(scenario) if ci else None
     sweep = scenario.get("sweep", {})
+    # Scenario-level flags are prepended to every row's extra_flags.
+    # Used for material that applies to all rows but isn't a swept parameter,
+    # e.g. --signing-cert and --cert-chain for certificate benchmark scenarios.
+    scenario_flags: list[str] = scenario.get("flags", [])
     rows = []
 
     if "model_shape" in sweep:
@@ -231,7 +237,7 @@ def _expand_sweep(scenario: dict, ci: bool) -> list[dict]:
                 "size": str(shape["size"]),
                 "size_bytes": size_bytes,
                 "files": shape.get("files", 1),
-                "extra_flags": [],
+                "extra_flags": list(scenario_flags),
                 "sweep_param": None,
                 "sweep_value": None,
             })
@@ -251,7 +257,7 @@ def _expand_sweep(scenario: dict, ci: bool) -> list[dict]:
                     "size": size_str,
                     "size_bytes": size_bytes,
                     "files": files,
-                    "extra_flags": [f"--{flag_name}", str(value)],
+                    "extra_flags": list(scenario_flags) + [f"--{flag_name}", str(value)],
                     # Store in result JSON with underscores, e.g. hash_algorithm
                     "sweep_param": flag_name.replace("-", "_"),
                     "sweep_value": value,
@@ -285,17 +291,23 @@ def _build_result(
     method: str,
     row: dict,
     times_ms: list[float],
+    scenario_defaults: dict | None = None,
 ) -> dict:
     params: dict[str, Any] = {
         "model_size_bytes": row["size_bytes"],
         "file_count": row["files"],
-        "method": method,
+        "method": method or None,   # None for operation:hash (method-independent)
         "hash_algorithm": None,
+        "serialization": None,
         "chunk_size": None,
         "max_workers": None,
         "shard_size": None,
     }
-    # Overlay the swept parameter value if present
+    # Apply scenario-level defaults (e.g. hash_algorithm, serialization)
+    if scenario_defaults:
+        for k, v in scenario_defaults.items():
+            params[k] = v
+    # Overlay the swept parameter value — takes precedence over defaults
     if row["sweep_param"] is not None:
         params[row["sweep_param"]] = row["sweep_value"]
 
@@ -354,6 +366,8 @@ def run_scenario(
     capabilities: dict,
     ci: bool,
     tmp_dir: Path,
+    signing_cert: str = "",
+    cert_chain: list[str] | None = None,
 ) -> list[dict]:
     name = scenario["name"]
 
@@ -363,7 +377,12 @@ def run_scenario(
         return []
 
     operation = scenario["operation"]
-    method = scenario.get("method", "key")
+    method = scenario.get("method", "")  # empty for operation:hash
+
+    # hash operation requires in-process timing (no standalone CLI command exists).
+    if operation == "hash" and not capabilities.get("benchmark_model"):
+        print(f"  [skip] {name}: operation:hash requires benchmark_model capability")
+        return []
     repeat = scenario.get("repeat", 5)
     rows = _expand_sweep(scenario, ci)
 
@@ -373,6 +392,16 @@ def run_scenario(
 
     results = []
     client = _adapter_name(entrypoint)
+    use_inproc = capabilities.get("benchmark_model", False)
+
+    # For certificate method: build extra flags that inject cert material into
+    # every adapter invocation (both timed and untimed setup calls).
+    cert_extra_flags: list[str] = []
+    if method == "certificate":
+        if signing_cert:
+            cert_extra_flags += ["--signing-cert", signing_cert]
+        for cert in (cert_chain or []):
+            cert_extra_flags += ["--cert-chain", cert]
 
     for idx, row in enumerate(rows):
         label = _fmt_size(row["size_bytes"])
@@ -380,28 +409,73 @@ def run_scenario(
             label += f" {row['sweep_param']}={row['sweep_value']}"
         else:
             label += f" x {row['files']} file(s)"
-        print(f"  {name} / {operation} / {label} ...", end=" ", flush=True)
+        mode = "inproc" if use_inproc else "subprocess"
+        print(f"  {name} / {operation} / {label} [{mode}] ...", end=" ", flush=True)
 
         model_path = _generate_model(tmp_dir, row["size"], row["files"], idx)
         bundle_path = tmp_dir / f"bundle_{idx}.sig"
 
-        if operation == "sign":
-            times, errors = _bench_sign(
-                entrypoint, model_path, bundle_path, method,
-                private_key, repeat, row["extra_flags"],
-            )
-        elif operation == "verify":
-            if not _sign_once(entrypoint, model_path, bundle_path,
-                              method, private_key, row["extra_flags"]):
-                print("SETUP FAILED (sign step)")
+        errors: list[str] = []
+
+        # Merge scenario cert flags with per-row sweep flags.
+        row_flags = cert_extra_flags + row["extra_flags"]
+
+        if use_inproc:
+            # Adapter handles its own timing loop in-process — one subprocess call
+            # per scenario row. Eliminates per-iteration startup overhead.
+            if operation == "hash":
+                times, err = run_benchmark(
+                    entrypoint, model_path, None, "hash",
+                    "", "", repeat, row_flags,
+                )
+                if err:
+                    errors.append(err)
+            elif operation == "sign":
+                times, err = run_benchmark(
+                    entrypoint, model_path, bundle_path, "sign",
+                    method, private_key, repeat, row_flags,
+                    signing_cert=signing_cert, cert_chain=cert_chain,
+                )
+                if err:
+                    errors.append(err)
+            elif operation == "verify":
+                if not _sign_once(entrypoint, model_path, bundle_path,
+                                  method, private_key, row_flags):
+                    print("SETUP FAILED (sign step)")
+                    continue
+                # Certificate verify uses cert chain — no public key concept.
+                verify_key = "" if method == "certificate" else public_key
+                times, err = run_benchmark(
+                    entrypoint, model_path, bundle_path, "verify",
+                    method, verify_key, repeat, row_flags,
+                    cert_chain=cert_chain,
+                )
+                if err:
+                    errors.append(err)
+            else:
+                print(f"unknown operation '{operation}', skipping")
                 continue
-            times, errors = _bench_verify(
-                entrypoint, model_path, bundle_path, method,
-                public_key, repeat, row["extra_flags"],
-            )
         else:
-            print(f"unknown operation '{operation}', skipping")
-            continue
+            # Fallback: separate subprocess per timed iteration.
+            if operation == "sign":
+                times, errors = _bench_sign(
+                    entrypoint, model_path, bundle_path, method,
+                    private_key, repeat, row_flags,
+                )
+            elif operation == "verify":
+                if not _sign_once(entrypoint, model_path, bundle_path,
+                                  method, private_key, row_flags):
+                    print("SETUP FAILED (sign step)")
+                    continue
+                # Certificate verify: no public key, cert chain is in row_flags.
+                verify_key = "" if method == "certificate" else public_key
+                times, errors = _bench_verify(
+                    entrypoint, model_path, bundle_path, method,
+                    verify_key, repeat, row_flags,
+                )
+            else:
+                print(f"unknown operation '{operation}', skipping")
+                continue
 
         if errors:
             print(f"ERRORS ({len(errors)}/{repeat} runs failed):")
@@ -412,7 +486,8 @@ def run_scenario(
             print("  no successful runs — skipping result")
             continue
 
-        result = _build_result(client, name, operation, method, row, times)
+        result = _build_result(client, name, operation, method, row, times,
+                               scenario_defaults=scenario.get("defaults"))
         results.append(result)
         r = result["results"]
         print(f"mean={r['mean_ms']:.0f}ms  throughput={r['throughput_mbps']:.1f} MB/s")
@@ -437,7 +512,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--private-key", required=True,
                         help="Private key PEM (e.g. test/assets/keys/p384/signing-key.pem)")
     parser.add_argument("--public-key", required=True,
-                        help="Public key PEM for verification")
+                        help="Public key PEM for key-method verification")
+    parser.add_argument("--signing-cert", default="",
+                        help="Signing certificate PEM for certificate-method scenarios")
+    parser.add_argument("--cert-chain", action="append", default=[],
+                        metavar="PEM",
+                        help="Certificate chain PEM for certificate-method scenarios "
+                             "(repeat for multiple: --cert-chain int-ca.pem --cert-chain ca.pem)")
     parser.add_argument("--output", required=True,
                         help="Output JSON file (array of result objects)")
     parser.add_argument("--ci", action="store_true",
@@ -448,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
     scenario_files = (
         [Path(args.scenario)]
         if args.scenario
-        else sorted(Path(args.scenarios).glob("*.yaml"))
+        else sorted(Path(args.scenarios).glob("**/*.yaml"))
     )
     if not scenario_files:
         print(f"No *.yaml files found in {args.scenarios}", file=sys.stderr)
@@ -480,6 +561,8 @@ def main(argv: list[str] | None = None) -> int:
                 capabilities=capabilities,
                 ci=args.ci,
                 tmp_dir=tmp_dir,
+                signing_cert=args.signing_cert,
+                cert_chain=args.cert_chain,
             )
             all_results.extend(results)
 

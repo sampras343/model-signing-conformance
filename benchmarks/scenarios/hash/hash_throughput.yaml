@@ -1,0 +1,24 @@
+# Baseline hashing throughput across model sizes and file counts.
+# Measures canonicalization only (hashing + serialization) — no signing overhead.
+# Method-independent: results apply equally to key and certificate signing.
+# Works with every conformance adapter that declares benchmark_model:true.
+name: hash_throughput
+description: Baseline canonicalization throughput across model sizes and file counts
+operation: hash
+requires_flags: []
+
+sweep:
+  model_shape:
+    - { size: 10MB,  files: 1   }
+    - { size: 100MB, files: 1   }
+    - { size: 100MB, files: 10  }
+    - { size: 1GB,   files: 1   }
+    - { size: 1GB,   files: 100 }
+
+repeat: 5
+ci_max_size: 100MB
+
+# Default parameter values recorded in results for every row.
+defaults:
+  hash_algorithm: sha256
+  serialization: file

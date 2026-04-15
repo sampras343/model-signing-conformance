@@ -61,7 +61,7 @@ def _param_summary(params: dict) -> str:
     fc = params.get("file_count", 1)
     if fc != 1:
         parts.append(f"{fc} files")
-    for key in ("hash_algorithm", "chunk_size", "max_workers", "shard_size"):
+    for key in ("hash_algorithm", "serialization", "chunk_size", "max_workers", "shard_size"):
         val = params.get(key)
         if val is not None:
             parts.append(f"{key}={val}")
