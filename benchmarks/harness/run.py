@@ -39,7 +39,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import yaml
 
@@ -196,65 +196,127 @@ def _generate_model(tmp_dir: Path, size: str, files: int, run_idx: int) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Benchmark execution
+# Executor protocol — pluggable benchmark backend
 # ---------------------------------------------------------------------------
 
-def _bench_sign(
-    entrypoint: str,
-    model_path: Path,
-    bundle_path: Path,
-    method: str,
-    private_key: str,
-    repeat: int,
-    extra_flags: list[str],
-) -> tuple[list[float], list[str]]:
-    times, errors = [], []
-    for _ in range(repeat):
-        bundle_path.unlink(missing_ok=True)
-        cmd = build_sign_cmd(entrypoint, model_path, bundle_path,
-                             method, private_key, extra_flags)
-        elapsed_ms, rc, stderr = _time_command(cmd)
-        if rc != 0:
-            errors.append(stderr.strip())
-        else:
-            times.append(elapsed_ms)
-    return times, errors
+class Executor(Protocol):
+    """Abstraction over how benchmark iterations are executed.
+
+    Two implementations: SubprocessExecutor (runs CLI per iteration) and
+    InprocExecutor (delegates to the adapter's benchmark-model subcommand).
+    """
+
+    def sign(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]: ...
+
+    def verify(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]: ...
+
+    def hash(
+        self, model: Path, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]: ...
+
+    def sign_once(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, flags: list[str],
+    ) -> bool: ...
 
 
-def _bench_verify(
-    entrypoint: str,
-    model_path: Path,
-    bundle_path: Path,
-    method: str,
-    public_key: str,
-    repeat: int,
-    extra_flags: list[str],
-) -> tuple[list[float], list[str]]:
-    times, errors = [], []
-    for _ in range(repeat):
-        cmd = build_verify_cmd(entrypoint, model_path, bundle_path,
-                               method, public_key, extra_flags)
-        elapsed_ms, rc, stderr = _time_command(cmd)
-        if rc != 0:
-            errors.append(stderr.strip())
-        else:
-            times.append(elapsed_ms)
-    return times, errors
+class SubprocessExecutor:
+    """Runs the adapter CLI as a subprocess for each timed iteration."""
+
+    def __init__(self, entrypoint: str) -> None:
+        self._ep = entrypoint
+
+    def sign(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        times, errors = [], []
+        for _ in range(repeat):
+            bundle.unlink(missing_ok=True)
+            cmd = build_sign_cmd(self._ep, model, bundle,
+                                 method, keys.sign_key(method), flags)
+            elapsed_ms, rc, stderr = _time_command(cmd)
+            if rc != 0:
+                errors.append(stderr.strip())
+            else:
+                times.append(elapsed_ms)
+        return times, errors
+
+    def verify(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        times, errors = [], []
+        for _ in range(repeat):
+            cmd = build_verify_cmd(self._ep, model, bundle,
+                                   method, keys.verify_key(method), flags)
+            elapsed_ms, rc, stderr = _time_command(cmd)
+            if rc != 0:
+                errors.append(stderr.strip())
+            else:
+                times.append(elapsed_ms)
+        return times, errors
+
+    def hash(
+        self, model: Path, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        return [], ["hash operation requires benchmark_model capability (inproc)"]
+
+    def sign_once(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, flags: list[str],
+    ) -> bool:
+        cmd = build_sign_cmd(self._ep, model, bundle,
+                             method, keys.sign_key(method), flags)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.returncode == 0
 
 
-def _sign_once(
-    entrypoint: str,
-    model_path: Path,
-    bundle_path: Path,
-    method: str,
-    private_key: str,
-    extra_flags: list[str],
-) -> bool:
-    """Sign once as untimed setup for a verify benchmark."""
-    cmd = build_sign_cmd(entrypoint, model_path, bundle_path,
-                         method, private_key, extra_flags)
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.returncode == 0
+class InprocExecutor:
+    """Delegates to the adapter's benchmark-model subcommand for in-process timing."""
+
+    def __init__(self, entrypoint: str) -> None:
+        self._ep = entrypoint
+
+    def _run(
+        self, model: Path, bundle: Path | None, operation: str,
+        method: str, keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        times, err = run_benchmark(
+            self._ep, model, bundle, operation, method, keys, repeat, flags,
+        )
+        return times, [err] if err else []
+
+    def sign(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        return self._run(model, bundle, "sign", method, keys, repeat, flags)
+
+    def verify(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        return self._run(model, bundle, "verify", method, keys, repeat, flags)
+
+    def hash(
+        self, model: Path, repeat: int, flags: list[str],
+    ) -> tuple[list[float], list[str]]:
+        empty_keys = KeyMaterial()
+        return self._run(model, None, "hash", "", empty_keys, repeat, flags)
+
+    def sign_once(
+        self, model: Path, bundle: Path, method: str,
+        keys: KeyMaterial, flags: list[str],
+    ) -> bool:
+        times, errors = self._run(model, bundle, "sign", method, keys, 1, flags)
+        return bool(times) and not errors
 
 
 # ---------------------------------------------------------------------------
@@ -413,69 +475,38 @@ def _print_row(result: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _run_row(
-    entrypoint: str,
+    executor: Executor,
     operation: str,
     method: str,
     model_path: Path,
     bundle_path: Path,
     keys: KeyMaterial,
     repeat: int,
-    row_flags: list[str],
-    use_inproc: bool,
+    row_extra_flags: list[str],
 ) -> tuple[list[float], list[str]]:
-    """Execute one benchmark row; return (times_ms, errors)."""
-    errors: list[str] = []
+    """Execute one benchmark row; return (times_ms, errors).
 
-    if use_inproc:
-        if operation == "hash":
-            times, err = run_benchmark(
-                entrypoint, model_path, None, "hash", "", "", repeat, row_flags,
-            )
-            if err:
-                errors.append(err)
+    Assembles method-specific flags from KeyMaterial internally so the
+    caller doesn't need to know about cert material or method details.
+    """
+    flags = keys.extra_flags(method) + row_extra_flags
 
-        elif operation == "sign":
-            times, err = run_benchmark(
-                entrypoint, model_path, bundle_path, "sign",
-                method, keys.sign_key(method), repeat, row_flags,
-                signing_cert=keys.signing_cert, cert_chain=keys.cert_chain,
-            )
-            if err:
-                errors.append(err)
+    if operation == "hash":
+        return executor.hash(model_path, repeat, flags)
 
-        elif operation == "verify":
-            if not _sign_once(entrypoint, model_path, bundle_path,
-                              method, keys.sign_key(method), row_flags):
-                return [], ["SETUP FAILED (sign step)"]
-            times, err = run_benchmark(
-                entrypoint, model_path, bundle_path, "verify",
-                method, keys.verify_key(method), repeat, row_flags,
-                cert_chain=keys.cert_chain,
-            )
-            if err:
-                errors.append(err)
+    if operation == "sign":
+        return executor.sign(
+            model_path, bundle_path, method, keys, repeat, flags,
+        )
 
-        else:
-            return [], [f"unknown operation '{operation}'"]
+    if operation == "verify":
+        if not executor.sign_once(model_path, bundle_path, method, keys, flags):
+            return [], ["SETUP FAILED (sign step)"]
+        return executor.verify(
+            model_path, bundle_path, method, keys, repeat, flags,
+        )
 
-    else:
-        if operation == "sign":
-            times, errors = _bench_sign(
-                entrypoint, model_path, bundle_path, method,
-                keys.sign_key(method), repeat, row_flags,
-            )
-        elif operation == "verify":
-            if not _sign_once(entrypoint, model_path, bundle_path,
-                              method, keys.sign_key(method), row_flags):
-                return [], ["SETUP FAILED (sign step)"]
-            times, errors = _bench_verify(
-                entrypoint, model_path, bundle_path, method,
-                keys.verify_key(method), repeat, row_flags,
-            )
-        else:
-            return [], [f"unknown operation '{operation}'"]
-
-    return times, errors
+    return [], [f"unknown operation '{operation}'"]
 
 
 def run_scenario(
@@ -485,8 +516,6 @@ def run_scenario(
     capabilities: dict,
     ci: bool,
     tmp_dir: Path,
-    signing_cert: str = "",
-    cert_chain: list[str] | None = None,
 ) -> list[dict]:
     name = scenario["name"]
 
@@ -496,7 +525,7 @@ def run_scenario(
         return []
 
     operation = scenario["operation"]
-    method = scenario.get("method", "")  # empty for operation:hash
+    method = scenario.get("method", "")
 
     if operation == "hash" and not capabilities.get("benchmark_model"):
         print(f"  [skip] {name}: operation:hash requires benchmark_model capability")
@@ -510,9 +539,7 @@ def run_scenario(
 
     client = _adapter_name(entrypoint)
     use_inproc = capabilities.get("benchmark_model", False)
-    # Method-specific flags (cert material, future sigstore token, etc.) are
-    # prepended to every row's flags so _run_row stays method-agnostic.
-    method_flags = keys.extra_flags(method)
+    executor: Executor = InprocExecutor(entrypoint) if use_inproc else SubprocessExecutor(entrypoint)
 
     results = []
     for idx, row in enumerate(rows):
@@ -524,11 +551,10 @@ def run_scenario(
 
         model_path = _generate_model(tmp_dir, row["size"], row["files"], idx)
         bundle_path = tmp_dir / f"bundle_{idx}.sig"
-        row_flags = method_flags + row["extra_flags"]
 
         times, errors = _run_row(
-            entrypoint, operation, method, model_path, bundle_path,
-            keys, repeat, row_flags, use_inproc,
+            executor, operation, method, model_path, bundle_path,
+            keys, repeat, row["extra_flags"],
         )
 
         if errors:
@@ -630,8 +656,6 @@ def main(argv: list[str] | None = None) -> int:
                 capabilities=capabilities,
                 ci=args.ci,
                 tmp_dir=tmp_dir,
-                signing_cert=args.signing_cert,
-                cert_chain=args.cert_chain,
             )
             all_results.extend(results)
 

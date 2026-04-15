@@ -1,6 +1,6 @@
 # Sign throughput across model sizes and file counts.
 # Requires NO adapter flags beyond sign-model — works with every conformance adapter.
-name: sign_throughput
+name: key_sign_throughput
 description: End-to-end signing throughput across model sizes and file counts
 operation: sign
 method: key

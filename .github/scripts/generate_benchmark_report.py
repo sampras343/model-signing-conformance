@@ -58,6 +58,8 @@ def _fmt_size(n: int) -> str:
 
 def _param_summary(params: dict) -> str:
     parts = [_fmt_size(params.get("model_size_bytes", 0))]
+    if params.get("method"):
+        parts.append(params["method"])
     fc = params.get("file_count", 1)
     if fc != 1:
         parts.append(f"{fc} files")
@@ -72,26 +74,37 @@ def _param_summary(params: dict) -> str:
 # Report sections
 # ---------------------------------------------------------------------------
 
-def _render_client_table(client: str, results: list[dict]) -> str:
-    if not results:
-        return f"<p><em>No benchmark results uploaded for <strong>{_esc(client)}</strong>.</em></p>"
-
+def _render_group_table(rows: list[dict]) -> str:
+    """Render a <table> for a list of result rows within a group."""
     rows_html = ""
-    for r in results:
+    for r in rows:
         params = r.get("parameters", {})
         res = r.get("results", {})
         rows_html += (
             f"<tr>"
             f"<td>{_esc(r.get('scenario', ''))}</td>"
-            f"<td>{_esc(r.get('operation', ''))}</td>"
             f"<td>{_esc(_param_summary(params))}</td>"
-            f"<td>{_esc(params.get('method', ''))}</td>"
             f"<td class='num'>{res.get('mean_ms', ''):.1f}</td>"
             f"<td class='num'>{res.get('min_ms', ''):.1f}</td>"
             f"<td class='num'>{res.get('stddev_ms', ''):.1f}</td>"
             f"<td class='num'>{res.get('throughput_mbps', ''):.1f}</td>"
             f"</tr>\n"
         )
+    return f"""<table>
+  <thead>
+    <tr>
+      <th>Scenario</th><th>Parameters</th>
+      <th>Mean ms</th><th>Min ms</th><th>Stddev ms</th><th>MB/s</th>
+    </tr>
+  </thead>
+  <tbody>
+{rows_html}  </tbody>
+</table>"""
+
+
+def _render_client_table(client: str, results: list[dict]) -> str:
+    if not results:
+        return f"<p><em>No benchmark results uploaded for <strong>{_esc(client)}</strong>.</em></p>"
 
     sys_info = results[0].get("system", {}) if results else {}
     sys_line = (
@@ -101,19 +114,29 @@ def _render_client_table(client: str, results: list[dict]) -> str:
         f"CPU: {_esc(sys_info.get('cpu_model', 'unknown'))}"
     )
 
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        op = r.get("operation", "other")
+        groups.setdefault(op, []).append(r)
+
+    op_order = ["hash", "sign", "verify"]
+    sorted_ops = [op for op in op_order if op in groups]
+    sorted_ops += [op for op in sorted(groups) if op not in op_order]
+
+    sections = ""
+    for op in sorted_ops:
+        label = {"hash": "Hash", "sign": "Sign", "verify": "Verify"}.get(op, _esc(op))
+        count = len(groups[op])
+        sections += (
+            f'<details open><summary><strong>{label}</strong> ({count} result{"s" if count != 1 else ""})</summary>\n'
+            f'{_render_group_table(groups[op])}\n'
+            f'</details>\n'
+        )
+
     return f"""
 <h2>{_esc(client)}</h2>
 <p class="sys-info">{sys_line}</p>
-<table>
-  <thead>
-    <tr>
-      <th>Scenario</th><th>Op</th><th>Parameters</th><th>Method</th>
-      <th>Mean ms</th><th>Min ms</th><th>Stddev ms</th><th>MB/s</th>
-    </tr>
-  </thead>
-  <tbody>
-{rows_html}  </tbody>
-</table>
+{sections}
 """
 
 
