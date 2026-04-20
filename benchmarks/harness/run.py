@@ -422,6 +422,7 @@ def _build_result(
     row: dict,
     times_ms: list[float],
     scenario_defaults: dict | None = None,
+    client_version: str = "",
 ) -> dict:
     params: dict[str, Any] = {
         "model_size_bytes": row["size_bytes"],
@@ -441,15 +442,17 @@ def _build_result(
     if row["sweep_param"] is not None:
         params[row["sweep_param"]] = row["sweep_value"]
 
-    return {
+    result: dict[str, Any] = {
         "client": client,
-        "client_version": "",
         "scenario": scenario_name,
         "operation": operation,
         "parameters": params,
         "results": _stats(times_ms, row["size_bytes"]),
         "system": _system_info(),
     }
+    if client_version:
+        result["client_version"] = client_version
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +587,8 @@ def run_scenario(
             continue
 
         result = _build_result(client, name, operation, method, row, times,
-                               scenario_defaults=scenario.get("defaults"))
+                               scenario_defaults=scenario.get("defaults"),
+                               client_version=capabilities.get("client_version", ""))
         results.append(result)
         r = result["results"]
         print(f"mean={r['mean_ms']:.0f}ms  throughput={r['throughput_mbps']:.1f} MB/s")
