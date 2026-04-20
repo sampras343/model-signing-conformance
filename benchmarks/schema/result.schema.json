@@ -13,7 +13,7 @@
     },
     "client_version": {
       "type": "string",
-      "description": "Client library/binary version if known, else empty string"
+      "description": "Client library/binary version if reported by adapter capabilities"
     },
     "scenario": {
       "type": "string",
@@ -59,7 +59,9 @@
       "properties": {
         "cpu_count":     { "type": "integer" },
         "platform":      { "type": "string" },
-        "timestamp_utc": { "type": "string", "format": "date-time" }
+        "timestamp_utc": { "type": "string", "format": "date-time" },
+        "ram_gb":        { "type": "number" },
+        "cpu_model":     { "type": "string" }
       }
     }
   }
