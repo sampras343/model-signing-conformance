@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sampras343/model-signing-conformance/benchmarks/schema/scenario.schema.json",
+  "title": "BenchmarkScenario",
+  "description": "A benchmark scenario definition. Each YAML file in benchmarks/scenarios/ must conform to this schema.",
+  "type": "object",
+  "required": ["name", "description", "operation", "sweep", "repeat", "ci_max_size", "requires_flags"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Unique scenario identifier (snake_case)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable description of what this scenario measures"
+    },
+    "operation": {
+      "enum": ["hash", "sign", "verify"],
+      "description": "Which operation to benchmark"
+    },
+    "method": {
+      "enum": ["key", "certificate", "sigstore"],
+      "description": "Signing method. Required for sign/verify operations, omitted for hash."
+    },
+    "requires_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^--[a-z][a-z0-9-]*$"
+      },
+      "description": "Adapter flags required to run this scenario. Empty array means no special flags needed."
+    },
+    "model_shape": {
+      "$ref": "#/$defs/model_shape",
+      "description": "Base model dimensions for parameter-sweep scenarios. Omit when sweep contains model_shape."
+    },
+    "sweep": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Parameters to sweep. Either {model_shape: [...shapes]} for throughput scenarios, or {flag-name: [...values]} for parameter sweeps."
+    },
+    "flags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Extra CLI flags prepended to every row (e.g. --signing-cert path)."
+    },
+    "repeat": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of timed iterations per scenario row"
+    },
+    "ci_max_size": {
+      "$ref": "#/$defs/ci_max_size",
+      "description": "Model dimension caps for CI mode. Same schema as model_shape."
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Default parameter values recorded in results for every row (e.g. hash_algorithm, serialization).",
+      "properties": {
+        "hash_algorithm": { "type": "string" },
+        "serialization":  { "type": "string" },
+        "chunk_size":     { "type": "integer" },
+        "max_workers":    { "type": "integer" },
+        "shard_size":     { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "if": {
+    "properties": { "operation": { "enum": ["sign", "verify"] } }
+  },
+  "then": {
+    "required": ["method"]
+  },
+  "else": {
+    "not": { "required": ["method"] }
+  },
+  "$defs": {
+    "model_shape": {
+      "type": "object",
+      "required": ["size"],
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(B|KB|MB|GB|TB)$",
+          "description": "Model size with unit suffix"
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of files in the synthetic model"
+        }
+      }
+    },
+    "ci_max_size": {
+      "type": "object",
+      "required": ["size"],
+      "additionalProperties": false,
+      "properties": {
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(B|KB|MB|GB|TB)$",
+          "description": "Maximum model size in CI mode"
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum file count in CI mode"
+        }
+      }
+    }
+  }
+}

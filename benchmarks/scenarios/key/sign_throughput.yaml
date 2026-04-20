@@ -17,9 +17,10 @@ sweep:
 # Number of timed repetitions per combination.
 repeat: 5
 
-# ci_max_size caps the largest model used when --ci is passed to run.py.
-# Rows whose size exceeds this are skipped in CI to keep runtime manageable.
-ci_max_size: 100MB
+# ci_max_size caps model dimensions when --ci is passed to run.py.
+# Same schema as model_shape: {size, files?}. Rows exceeding size are skipped;
+# file count is capped to files (if given) in parameter-sweep scenarios.
+ci_max_size: { size: 100MB }
 
 # Default parameter values recorded in results for every row.
 # These are not passed as adapter flags — they document what the adapter uses by default.

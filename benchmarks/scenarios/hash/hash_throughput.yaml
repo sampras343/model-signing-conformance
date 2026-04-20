@@ -16,7 +16,7 @@ sweep:
     - { size: 1GB,   files: 100 }
 
 repeat: 5
-ci_max_size: 100MB
+ci_max_size: { size: 100MB }
 
 # Default parameter values recorded in results for every row.
 defaults:

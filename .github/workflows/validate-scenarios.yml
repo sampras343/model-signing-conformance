@@ -1,0 +1,35 @@
+name: Validate Benchmark Scenarios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'benchmarks/scenarios/**'
+      - 'benchmarks/schema/**'
+      - '.github/scripts/validate_scenarios.py'
+      - '.github/workflows/validate-scenarios.yml'
+  pull_request:
+    paths:
+      - 'benchmarks/scenarios/**'
+      - 'benchmarks/schema/**'
+      - '.github/scripts/validate_scenarios.py'
+      - '.github/workflows/validate-scenarios.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate scenario schemas
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install jsonschema pyyaml
+
+      - name: Validate all benchmark scenarios against schema
+        run: python .github/scripts/validate_scenarios.py

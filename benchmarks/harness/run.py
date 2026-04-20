@@ -329,13 +329,25 @@ def _load_scenario(path: Path) -> dict:
 
 
 def _ci_cap_bytes(scenario: dict) -> int | None:
+    """Extract the size cap from ci_max_size (dict with 'size' key)."""
     raw = scenario.get("ci_max_size")
-    return _size_to_bytes(str(raw)) if raw is not None else None
+    if raw is None:
+        return None
+    return _size_to_bytes(str(raw["size"]))
+
+
+def _ci_cap_files(scenario: dict) -> int | None:
+    """Extract the optional file count cap from ci_max_size."""
+    raw = scenario.get("ci_max_size")
+    if raw is None:
+        return None
+    return raw.get("files")
 
 
 def _expand_sweep(scenario: dict, ci: bool) -> list[dict]:
     """Return one parameter dict per benchmark row."""
     ci_cap = _ci_cap_bytes(scenario) if ci else None
+    ci_files = _ci_cap_files(scenario) if ci else None
     sweep = scenario.get("sweep", {})
     # Scenario-level flags are prepended to every row's extra_flags.
     # Used for material that applies to all rows but isn't a swept parameter,
@@ -366,6 +378,8 @@ def _expand_sweep(scenario: dict, ci: bool) -> list[dict]:
             size_bytes = min(size_bytes, ci_cap)
         size_str = _fmt_size(size_bytes)
         files = base.get("files", 1)
+        if ci_files is not None:
+            files = min(files, ci_files)
 
         for flag_name, values in sweep.items():
             for value in values:
