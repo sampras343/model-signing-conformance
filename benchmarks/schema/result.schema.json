@@ -20,7 +20,7 @@
       "description": "Name field from the scenario YAML file"
     },
     "operation": {
-      "enum": ["sign", "verify"],
+      "enum": ["hash", "sign", "verify"],
       "description": "Which operation was timed"
     },
     "parameters": {
@@ -31,8 +31,9 @@
       "properties": {
         "model_size_bytes": { "type": "integer" },
         "file_count":       { "type": "integer" },
-        "method":           { "type": "string" },
+        "method":           { "type": ["string", "null"] },
         "hash_algorithm":   { "type": ["string", "null"] },
+        "serialization":    { "type": ["string", "null"] },
         "chunk_size":       { "type": ["integer", "null"] },
         "max_workers":      { "type": ["integer", "null"] },
         "shard_size":       { "type": ["integer", "null"] }
