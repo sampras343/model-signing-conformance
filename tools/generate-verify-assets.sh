@@ -208,6 +208,18 @@ echo "  [PYTHON] sign certificate (expired) → $NEGATIVE/certificate-expired_fa
 rm -rf "$TMPDIR_EX"
 
 echo ""
+echo "=== Generating cross-client interop bundles (signed by Go) ==="
+
+# key-simple-go: same model/keys as key-simple, signed by Go adapter
+MODEL="$ASSETS/models/simple"
+sign_with_go key "$MODEL" "$VERIFY/positive/key-simple-go/bundle.sig" \
+    --ignore-paths "$MODEL/ignore-me"
+
+# certificate-simple-go: same model/keys as certificate-simple, signed by Go adapter
+sign_with_go certificate "$MODEL" "$VERIFY/positive/certificate-simple-go/bundle.sig" \
+    --ignore-paths "$MODEL/ignore-me"
+
+echo ""
 echo "Done! All pre-committed bundles generated."
 echo ""
 echo "Spot-check: Go verifies canonical bundles (proves spec compliance + cross-language interop):"

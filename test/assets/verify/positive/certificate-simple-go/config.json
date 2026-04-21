@@ -1,0 +1,13 @@
+{
+  "description": "Go-signed certificate-based verification (cross-client interop: Go signs, test client verifies)",
+  "method": "certificate",
+  "model": "models/simple",
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ],
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from .client import ModelSigningClient, CaseConfig
+from .conftest import validate_bundle_structure
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -52,6 +53,8 @@ def test_roundtrip(
         f"stdout: {sign_result.stdout}\nstderr: {sign_result.stderr}"
     )
     assert bundle_path.exists(), f"bundle.sig not created after signing for {roundtrip_dir.name}"
+
+    validate_bundle_structure(bundle_path, cfg.method)
 
     # For ignore-unsigned tests: add an unsigned file after signing
     verify_block = cfg.verify

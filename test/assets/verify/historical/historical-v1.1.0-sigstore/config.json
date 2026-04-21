@@ -1,0 +1,11 @@
+{
+  "description": "Backwards compatibility: sigstore-signed bundle from Python v1.1.0 (Fulcio cert + Rekor transparency log)",
+  "method": "sigstore",
+  "model_path": "model",
+  "verify": {
+    "ignore_paths": [
+      "ignore-me",
+      "model.sig"
+    ]
+  }
+}

@@ -1,2 +1,5 @@
 pytest>=8.0
 pytest-json-report>=1.5.0
+jsonschema>=4.20
+referencing>=0.31
+oms-schemas @ git+https://github.com/sampras343/model-signing-spec.git@main

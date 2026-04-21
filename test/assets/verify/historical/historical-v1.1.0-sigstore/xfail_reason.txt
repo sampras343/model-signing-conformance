@@ -1,0 +1,1 @@
+Sigstore verification requires OIDC identity/issuer and Sigstore infrastructure (Fulcio, Rekor). The selftest-client adapter does not yet support --method sigstore for verification. This test documents the bundle format coverage gap; see conformance-13.

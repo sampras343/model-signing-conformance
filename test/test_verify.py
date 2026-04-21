@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from .client import ModelSigningClient, CaseConfig
+from .schema_validator import validate_bundle
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -95,6 +96,12 @@ def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) ->
     bundle = verify_dir / "bundle.sig"
     if not bundle.exists():
         pytest.fail(f"Missing bundle.sig in {verify_dir}")
+
+    # Schema validation for non-failure bundles: verify that the pre-committed
+    # bundle conforms to the OMS spec schemas. Negative test bundles are
+    # intentionally malformed and skip this check.
+    if not expected_fail and bundle.stat().st_size > 0:
+        validate_bundle(bundle, method=cfg.method)
 
     # Resolve model path (copy to temp if using shared models)
     model_path = _resolve_model(cfg, verify_dir, tmp_path)
