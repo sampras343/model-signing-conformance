@@ -17,6 +17,10 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+
+PrevIndex = dict[tuple[str, str, str, int, Any], float]
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +43,27 @@ def load_results(results_dir: Path) -> dict[str, list[dict]]:
         except Exception:
             out[client_name] = []
     return out
+
+
+def build_prev_index(prev_results: dict[str, list[dict]]) -> PrevIndex:
+    """Build a lookup from (client, scenario, op, size, method) to throughput."""
+    index: PrevIndex = {}
+    for results in prev_results.values():
+        for r in results:
+            if r.get("status", "ok") != "ok":
+                continue
+            p = r.get("parameters", {})
+            key = (
+                r.get("client", ""),
+                r.get("scenario", ""),
+                r.get("operation", ""),
+                p.get("model_size_bytes", 0),
+                p.get("method"),
+            )
+            mbps = r.get("results", {}).get("throughput_mbps", 0.0)
+            if mbps > 0:
+                index[key] = mbps
+    return index
 
 
 # ---------------------------------------------------------------------------
@@ -74,12 +99,47 @@ def _param_summary(params: dict) -> str:
 # Report sections
 # ---------------------------------------------------------------------------
 
-def _render_group_table(rows: list[dict]) -> str:
+def _delta_cell(curr: float, prev: float | None) -> str:
+    """Render the delta cell comparing current to previous throughput."""
+    if prev is None:
+        return "<td class='num'>—</td>"
+    delta_pct = ((curr - prev) / prev) * 100
+    if delta_pct <= -15:
+        cls = "delta-neg"
+    elif delta_pct >= 15:
+        cls = "delta-pos"
+    else:
+        cls = "num"
+    return f"<td class='{cls}'>{delta_pct:+.1f}%</td>"
+
+
+def _render_group_table(rows: list[dict], prev_index: PrevIndex | None = None) -> str:
     """Render a <table> for a list of result rows within a group."""
+    has_prev = prev_index is not None and bool(prev_index)
+    prev_hdr = "<th>Prev MB/s</th><th>Delta</th>" if has_prev else ""
+
     rows_html = ""
     for r in rows:
         params = r.get("parameters", {})
         res = r.get("results", {})
+        curr_mbps = res.get("throughput_mbps", 0.0)
+
+        prev_cells = ""
+        if has_prev:
+            key = (
+                r.get("client", ""),
+                r.get("scenario", ""),
+                r.get("operation", ""),
+                params.get("model_size_bytes", 0),
+                params.get("method"),
+            )
+            prev_mbps = prev_index.get(key)
+            prev_val = f"{prev_mbps:.1f}" if prev_mbps is not None else "—"
+            prev_cells = (
+                f"<td class='num'>{prev_val}</td>"
+                f"{_delta_cell(curr_mbps, prev_mbps)}"
+            )
+
         rows_html += (
             f"<tr>"
             f"<td>{_esc(r.get('scenario', ''))}</td>"
@@ -87,7 +147,8 @@ def _render_group_table(rows: list[dict]) -> str:
             f"<td class='num'>{res.get('mean_ms', ''):.1f}</td>"
             f"<td class='num'>{res.get('min_ms', ''):.1f}</td>"
             f"<td class='num'>{res.get('stddev_ms', ''):.1f}</td>"
-            f"<td class='num'>{res.get('throughput_mbps', ''):.1f}</td>"
+            f"<td class='num'>{curr_mbps:.1f}</td>"
+            f"{prev_cells}"
             f"</tr>\n"
         )
     return f"""<table>
@@ -95,6 +156,7 @@ def _render_group_table(rows: list[dict]) -> str:
     <tr>
       <th>Scenario</th><th>Parameters</th>
       <th>Mean ms</th><th>Min ms</th><th>Stddev ms</th><th>MB/s</th>
+      {prev_hdr}
     </tr>
   </thead>
   <tbody>
@@ -142,7 +204,8 @@ def _render_skipped_table(all_results: dict[str, list[dict]]) -> str:
 """
 
 
-def _render_client_table(client: str, results: list[dict]) -> str:
+def _render_client_table(client: str, results: list[dict],
+                         prev_index: PrevIndex | None = None) -> str:
     ok_results = [r for r in results if r.get("status", "ok") == "ok"]
     if not ok_results:
         skip_count = sum(1 for r in results if r.get("status") == "skipped")
@@ -179,7 +242,7 @@ def _render_client_table(client: str, results: list[dict]) -> str:
         count = len(groups[op])
         sections += (
             f'<details open><summary><strong>{label}</strong> ({count} result{"s" if count != 1 else ""})</summary>\n'
-            f'{_render_group_table(groups[op])}\n'
+            f'{_render_group_table(groups[op], prev_index)}\n'
             f'</details>\n'
         )
 
@@ -245,9 +308,10 @@ def _render_comparison(all_results: dict[str, list[dict]]) -> str:
 # Full page
 # ---------------------------------------------------------------------------
 
-def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
+def render_page(all_results: dict[str, list[dict]], generated_at: str,
+                prev_index: PrevIndex | None = None) -> str:
     client_sections = "\n".join(
-        _render_client_table(client, results)
+        _render_client_table(client, results, prev_index)
         for client, results in sorted(all_results.items())
     )
     comparison = _render_comparison(all_results)
@@ -281,6 +345,8 @@ def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
     nav a {{ color: #ccd6f6; }}
     nav a:hover {{ color: #fff; }}
     .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    .delta-pos {{ text-align: right; font-variant-numeric: tabular-nums; color: #1a7f37; font-weight: 600; }}
+    .delta-neg {{ text-align: right; font-variant-numeric: tabular-nums; color: #cf222e; font-weight: 600; }}
     .sys-info {{ font-size: .8rem; color: #555; margin: .2rem 0 .4rem; }}
     .meta {{ font-size: .8rem; color: #777; margin-top: 2rem; }}
   </style>
@@ -318,6 +384,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--results-dir", required=True, metavar="DIR",
                         help="Directory containing <client>.json result arrays")
+    parser.add_argument("--previous-dir", default=None, metavar="DIR",
+                        help="Directory containing previous run's result JSONs "
+                             "(enables delta columns in the report)")
     parser.add_argument("--output", required=True, metavar="FILE",
                         help="Output HTML file path")
     args = parser.parse_args(argv)
@@ -325,11 +394,17 @@ def main(argv: list[str] | None = None) -> int:
     results_dir = Path(args.results_dir)
     all_results = load_results(results_dir)
 
+    prev_index: PrevIndex | None = None
+    if args.previous_dir:
+        prev_data = load_results(Path(args.previous_dir))
+        prev_index = build_prev_index(prev_data)
+        print(f"Loaded {len(prev_index)} previous result(s) for delta comparison")
+
     if not any(all_results.values()):
         print("WARNING: no benchmark results found — generating empty report", file=sys.stderr)
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    html = render_page(all_results, generated_at)
+    html = render_page(all_results, generated_at, prev_index)
     Path(args.output).write_text(html)
     print(f"Wrote benchmark report to {args.output}  ({len(all_results)} client(s))")
     return 0

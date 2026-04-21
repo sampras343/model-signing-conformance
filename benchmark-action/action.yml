@@ -88,6 +88,9 @@ runs:
       shell: bash
       env:
         MODEL_SIGNING_BIN: ${{ inputs.model-signing-bin }}
+        OMS_BENCHMARK_CLIENT_REPO: ${{ github.repository }}
+        OMS_BENCHMARK_CLIENT_SHA: ${{ github.sha }}
+        OMS_BENCHMARK_WORKFLOW_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: |
         CI_FLAG=""
         if [ "${{ inputs.ci }}" = "true" ]; then

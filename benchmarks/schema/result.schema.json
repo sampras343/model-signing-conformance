@@ -26,6 +26,21 @@
       "minLength": 1,
       "description": "Client library/binary version if reported by adapter capabilities"
     },
+    "client_repo": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Source repository (e.g. 'owner/repo'), set via OMS_BENCHMARK_CLIENT_REPO"
+    },
+    "client_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "Git commit SHA of the client under test, set via OMS_BENCHMARK_CLIENT_SHA"
+    },
+    "workflow_run": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL of the GitHub Actions workflow run that produced this result"
+    },
     "scenario": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$",

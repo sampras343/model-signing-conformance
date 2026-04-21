@@ -76,11 +76,41 @@ jobs:
           merge-multiple: true
           path: results/
 
+      - name: Download previous benchmark snapshot
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: collect-benchmarks.yml
+          name: benchmark-snapshot
+          path: previous/
+          if_no_artifact_found: warn
+          workflow_conclusion: success
+        continue-on-error: true
+
+      - name: Check for benchmark regressions
+        if: hashFiles('previous/*.json') != ''
+        run: |
+          python .github/scripts/check_regression.py \
+            --current-dir results/ \
+            --previous-dir previous/ \
+            --threshold 20
+        continue-on-error: true
+
       - name: Generate benchmark HTML report
         run: |
+          PREV_FLAG=""
+          if [ -n "$(ls previous/*.json 2>/dev/null)" ]; then
+            PREV_FLAG="--previous-dir previous/"
+          fi
           python .github/scripts/generate_benchmark_report.py \
             --results-dir results/ \
+            $PREV_FLAG \
             --output results/benchmarks-index.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-snapshot
+          path: results/*.json
+          if-no-files-found: warn
 
       - uses: actions/upload-artifact@v4
         with:
