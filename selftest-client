@@ -247,6 +247,15 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _client_version() -> str:
+    """Return the installed model_signing package version, or empty string."""
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        return version("model_signing")
+    except (PackageNotFoundError, Exception):
+        return ""
+
+
 def cmd_capabilities() -> int:
     """Print the benchmark capabilities of this adapter as JSON.
 
@@ -257,11 +266,14 @@ def cmd_capabilities() -> int:
     When those flags are added to the upstream CLI, update the "flags" list
     below and add the corresponding translation in cmd_sign().
     """
-    caps = {
+    caps: dict[str, object] = {
         "flags": [],
         "hash_algorithms": ["sha256", "blake2b", "blake3"],
         "benchmark_model": True,
     }
+    ver = _client_version()
+    if ver:
+        caps["client_version"] = ver
     print(json.dumps(caps))
     return 0
 
