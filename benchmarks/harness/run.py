@@ -414,6 +414,26 @@ def _check_requires(scenario: dict, capabilities: dict) -> str | None:
 # Result building
 # ---------------------------------------------------------------------------
 
+def _build_skip_entry(
+    client: str,
+    scenario_name: str,
+    operation: str,
+    reason: str,
+    client_version: str = "",
+) -> dict:
+    """Build a structured skip entry for scenarios that cannot run."""
+    entry: dict[str, Any] = {
+        "status": "skipped",
+        "client": client,
+        "scenario": scenario_name,
+        "operation": operation,
+        "skip_reason": reason,
+    }
+    if client_version:
+        entry["client_version"] = client_version
+    return entry
+
+
 def _build_result(
     client: str,
     scenario_name: str,
@@ -443,6 +463,7 @@ def _build_result(
         params[row["sweep_param"]] = row["sweep_value"]
 
     result: dict[str, Any] = {
+        "status": "ok",
         "client": client,
         "scenario": scenario_name,
         "operation": operation,
@@ -535,26 +556,28 @@ def run_scenario(
     tmp_dir: Path,
 ) -> list[dict]:
     name = scenario["name"]
+    operation = scenario["operation"]
+    client = _adapter_name(entrypoint)
+    client_ver = capabilities.get("client_version", "")
 
     skip_reason = _check_requires(scenario, capabilities)
     if skip_reason:
         print(f"  [skip] {name}: {skip_reason}")
-        return []
+        return [_build_skip_entry(client, name, operation, skip_reason, client_ver)]
 
-    operation = scenario["operation"]
     method = scenario.get("method", "")
 
     if operation == "hash" and not capabilities.get("benchmark_model"):
-        print(f"  [skip] {name}: operation:hash requires benchmark_model capability")
-        return []
+        reason = "operation:hash requires benchmark_model capability"
+        print(f"  [skip] {name}: {reason}")
+        return [_build_skip_entry(client, name, operation, reason, client_ver)]
 
     repeat = scenario.get("repeat", 5)
     rows = _expand_sweep(scenario, ci)
     if not rows:
-        print(f"  [skip] {name}: all rows filtered by ci_max_size")
-        return []
-
-    client = _adapter_name(entrypoint)
+        reason = "all rows filtered by ci_max_size"
+        print(f"  [skip] {name}: {reason}")
+        return [_build_skip_entry(client, name, operation, reason, client_ver)]
     use_inproc = capabilities.get("benchmark_model", False)
     executor: Executor = InprocExecutor(entrypoint) if use_inproc else SubprocessExecutor(entrypoint)
 
@@ -679,7 +702,10 @@ def main(argv: list[str] | None = None) -> int:
 
     output = Path(args.output)
     output.write_text(json.dumps(all_results, indent=2))
-    print(f"\nWrote {len(all_results)} result(s) to {output}")
+    n_ok = sum(1 for r in all_results if r.get("status", "ok") == "ok")
+    n_skip = sum(1 for r in all_results if r.get("status") == "skipped")
+    print(f"\nWrote {len(all_results)} entry/entries to {output}"
+          f"  ({n_ok} result(s), {n_skip} skipped)")
     return 0
 
 

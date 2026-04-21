@@ -102,12 +102,58 @@ def _render_group_table(rows: list[dict]) -> str:
 </table>"""
 
 
+def _render_skipped_table(all_results: dict[str, list[dict]]) -> str:
+    """Render a Skipped Scenarios section from all skip entries across clients."""
+    skips: list[tuple[str, str, str, str]] = []
+    for client, results in sorted(all_results.items()):
+        for r in results:
+            if r.get("status") == "skipped":
+                skips.append((
+                    client,
+                    r.get("scenario", ""),
+                    r.get("operation", ""),
+                    r.get("skip_reason", ""),
+                ))
+
+    if not skips:
+        return ""
+
+    rows_html = ""
+    for client, scenario, operation, reason in skips:
+        rows_html += (
+            f"<tr>"
+            f"<td>{_esc(client)}</td>"
+            f"<td>{_esc(scenario)}</td>"
+            f"<td>{_esc(operation)}</td>"
+            f"<td>{_esc(reason)}</td>"
+            f"</tr>\n"
+        )
+
+    return f"""
+<h2>Skipped Scenarios</h2>
+<p>Scenarios the adapter could not run (missing flags, capabilities, or CI size caps).</p>
+<table>
+  <thead>
+    <tr><th>Client</th><th>Scenario</th><th>Operation</th><th>Reason</th></tr>
+  </thead>
+  <tbody>
+{rows_html}  </tbody>
+</table>
+"""
+
+
 def _render_client_table(client: str, results: list[dict]) -> str:
-    if not results:
+    ok_results = [r for r in results if r.get("status", "ok") == "ok"]
+    if not ok_results:
+        skip_count = sum(1 for r in results if r.get("status") == "skipped")
+        if skip_count:
+            return (f"<h2>{_esc(client)}</h2>\n"
+                    f"<p><em>All {skip_count} scenario(s) were skipped "
+                    f"— see Skipped Scenarios above.</em></p>")
         return f"<p><em>No benchmark results uploaded for <strong>{_esc(client)}</strong>.</em></p>"
 
-    sys_info = results[0].get("system", {}) if results else {}
-    client_ver = results[0].get("client_version", "") if results else ""
+    sys_info = ok_results[0].get("system", {})
+    client_ver = ok_results[0].get("client_version", "")
     sys_parts = [
         f"Platform: {_esc(sys_info.get('platform', 'unknown'))}",
         f"CPUs: {_esc(sys_info.get('cpu_count', '?'))}",
@@ -119,7 +165,7 @@ def _render_client_table(client: str, results: list[dict]) -> str:
     sys_line = " &bull; ".join(sys_parts)
 
     groups: dict[str, list[dict]] = {}
-    for r in results:
+    for r in ok_results:
         op = r.get("operation", "other")
         groups.setdefault(op, []).append(r)
 
@@ -149,7 +195,7 @@ def _render_comparison(all_results: dict[str, list[dict]]) -> str:
     # Index: (scenario, operation, model_size_bytes, method) → {client: mbps}
     index: dict[tuple, dict[str, float]] = {}
     for client, results in all_results.items():
-        for r in results:
+        for r in (x for x in results if x.get("status", "ok") == "ok"):
             p = r.get("parameters", {})
             key = (
                 r.get("scenario", ""),
@@ -205,7 +251,9 @@ def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
         for client, results in sorted(all_results.items())
     )
     comparison = _render_comparison(all_results)
-    total_runs = sum(len(v) for v in all_results.values())
+    skipped_section = _render_skipped_table(all_results)
+    total_runs = sum(1 for v in all_results.values() for r in v
+                     if r.get("status", "ok") == "ok")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -249,6 +297,8 @@ def render_page(all_results: dict[str, list[dict]], generated_at: str) -> str:
   </p>
 
   {comparison}
+
+  {skipped_section}
 
   {client_sections}
 

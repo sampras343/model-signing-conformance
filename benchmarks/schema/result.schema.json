@@ -4,9 +4,18 @@
   "title": "BenchmarkResult",
   "description": "A single benchmark result entry produced by the harness. Multiple entries are collected in a JSON array.",
   "type": "object",
-  "required": ["client", "scenario", "operation", "parameters", "results", "system"],
+  "required": ["client", "scenario", "operation"],
   "additionalProperties": false,
   "properties": {
+    "status": {
+      "enum": ["ok", "skipped"],
+      "description": "Whether this entry represents a completed run or a skipped scenario. Absent means 'ok' for backward compatibility."
+    },
+    "skip_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable reason why the scenario was skipped (present only when status is 'skipped')"
+    },
     "client": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*$",
@@ -67,5 +76,15 @@
         "cpu_model":     { "type": "string" }
       }
     }
+  },
+  "if": {
+    "properties": { "status": { "const": "skipped" } },
+    "required": ["status"]
+  },
+  "then": {
+    "required": ["skip_reason"]
+  },
+  "else": {
+    "required": ["parameters", "results", "system"]
   }
 }
