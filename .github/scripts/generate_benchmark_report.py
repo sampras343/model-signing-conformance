@@ -107,12 +107,16 @@ def _render_client_table(client: str, results: list[dict]) -> str:
         return f"<p><em>No benchmark results uploaded for <strong>{_esc(client)}</strong>.</em></p>"
 
     sys_info = results[0].get("system", {}) if results else {}
-    sys_line = (
-        f"Platform: {_esc(sys_info.get('platform', 'unknown'))} &bull; "
-        f"CPUs: {_esc(sys_info.get('cpu_count', '?'))} &bull; "
-        f"RAM: {_esc(sys_info.get('ram_gb', '?'))} GB &bull; "
-        f"CPU: {_esc(sys_info.get('cpu_model', 'unknown'))}"
-    )
+    client_ver = results[0].get("client_version", "") if results else ""
+    sys_parts = [
+        f"Platform: {_esc(sys_info.get('platform', 'unknown'))}",
+        f"CPUs: {_esc(sys_info.get('cpu_count', '?'))}",
+        f"RAM: {_esc(sys_info.get('ram_gb', '?'))} GB",
+        f"CPU: {_esc(sys_info.get('cpu_model', 'unknown'))}",
+    ]
+    if client_ver:
+        sys_parts.insert(0, f"Version: <code>{_esc(client_ver)}</code>")
+    sys_line = " &bull; ".join(sys_parts)
 
     groups: dict[str, list[dict]] = {}
     for r in results:
