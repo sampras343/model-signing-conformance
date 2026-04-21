@@ -40,7 +40,21 @@
     "sweep": {
       "type": "object",
       "minProperties": 1,
-      "description": "Parameters to sweep. Either {model_shape: [...shapes]} for throughput scenarios, or {flag-name: [...values]} for parameter sweeps."
+      "description": "Parameters to sweep. Either {model_shape: [...shapes]} for throughput scenarios, or {flag-name: [...values]} for parameter sweeps.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "properties": {
+        "model_shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/model_shape" }
+        }
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1
+      }
     },
     "flags": {
       "type": "array",
