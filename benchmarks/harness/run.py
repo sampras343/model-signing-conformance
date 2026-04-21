@@ -414,6 +414,21 @@ def _check_requires(scenario: dict, capabilities: dict) -> str | None:
 # Result building
 # ---------------------------------------------------------------------------
 
+_CI_METADATA_VARS = [
+    ("client_repo", "OMS_BENCHMARK_CLIENT_REPO"),
+    ("client_sha", "OMS_BENCHMARK_CLIENT_SHA"),
+    ("workflow_run", "OMS_BENCHMARK_WORKFLOW_RUN"),
+]
+
+
+def _inject_ci_metadata(entry: dict[str, Any]) -> None:
+    """Add CI metadata from environment variables when running in GitHub Actions."""
+    for key, env_var in _CI_METADATA_VARS:
+        val = os.environ.get(env_var, "")
+        if val:
+            entry[key] = val
+
+
 def _build_skip_entry(
     client: str,
     scenario_name: str,
@@ -431,6 +446,7 @@ def _build_skip_entry(
     }
     if client_version:
         entry["client_version"] = client_version
+    _inject_ci_metadata(entry)
     return entry
 
 
@@ -473,6 +489,7 @@ def _build_result(
     }
     if client_version:
         result["client_version"] = client_version
+    _inject_ci_metadata(result)
     return result
 
 
