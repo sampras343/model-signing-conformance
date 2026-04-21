@@ -3,8 +3,10 @@ name: Publish Conformance Report
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_run:
+    workflows: ["Collect Benchmark Results"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +17,9 @@ permissions:
 jobs:
   fetch-results:
     name: Fetch results from ${{ matrix.client.name }}
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
