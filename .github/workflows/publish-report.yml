@@ -43,6 +43,7 @@ jobs:
           github_token: ${{ secrets.CONFORMANCE_READ_TOKEN }}
           repo: ${{ matrix.client.repo }}
           workflow: ${{ matrix.client.workflow }}
+          branch: main
           name: ${{ matrix.client.artifact }}
           path: results/
           if_no_artifact_found: warn
