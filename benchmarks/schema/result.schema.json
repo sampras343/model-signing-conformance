@@ -9,14 +9,17 @@
   "properties": {
     "client": {
       "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
       "description": "Adapter identifier, e.g. 'python', 'go'"
     },
     "client_version": {
       "type": "string",
+      "minLength": 1,
       "description": "Client library/binary version if reported by adapter capabilities"
     },
     "scenario": {
       "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
       "description": "Name field from the scenario YAML file"
     },
     "operation": {
@@ -31,7 +34,7 @@
       "properties": {
         "model_size_bytes": { "type": "integer" },
         "file_count":       { "type": "integer" },
-        "method":           { "type": ["string", "null"] },
+        "method":           { "oneOf": [{ "enum": ["key", "certificate", "sigstore"] }, { "type": "null" }] },
         "hash_algorithm":   { "type": ["string", "null"] },
         "serialization":    { "type": ["string", "null"] },
         "chunk_size":       { "type": ["integer", "null"] },
@@ -45,11 +48,11 @@
       "additionalProperties": false,
       "properties": {
         "repeat":          { "type": "integer", "minimum": 1 },
-        "times_ms":        { "type": "array", "items": { "type": "number" }, "minItems": 1 },
-        "mean_ms":         { "type": "number" },
-        "min_ms":          { "type": "number" },
-        "stddev_ms":       { "type": "number" },
-        "throughput_mbps": { "type": "number" }
+        "times_ms":        { "type": "array", "items": { "type": "number", "minimum": 0 }, "minItems": 1 },
+        "mean_ms":         { "type": "number", "minimum": 0 },
+        "min_ms":          { "type": "number", "minimum": 0 },
+        "stddev_ms":       { "type": "number", "minimum": 0 },
+        "throughput_mbps": { "type": "number", "minimum": 0 }
       }
     },
     "system": {
@@ -57,7 +60,7 @@
       "required": ["cpu_count", "platform", "timestamp_utc"],
       "additionalProperties": false,
       "properties": {
-        "cpu_count":     { "type": "integer" },
+        "cpu_count":     { "type": "integer", "minimum": 1 },
         "platform":      { "type": "string" },
         "timestamp_utc": { "type": "string", "format": "date-time" },
         "ram_gb":        { "type": "number" },
