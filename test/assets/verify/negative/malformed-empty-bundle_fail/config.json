@@ -1,0 +1,11 @@
+{
+  "description": "FAIL: Rejection of empty file as bundle (zero bytes)",
+  "method": "key",
+  "model": "models/simple",
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

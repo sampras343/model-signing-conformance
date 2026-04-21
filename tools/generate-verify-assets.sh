@@ -171,6 +171,43 @@ rm -rf "$TMPDIR_EF"
 head -c 100 "$VERIFY/key-simple/bundle.sig" > "$VERIFY/key-simple-truncated-bundle_fail/bundle.sig"
 
 echo ""
+echo "=== Generating structural / crypto failure bundles ==="
+
+NEGATIVE="$VERIFY/negative"
+
+# malformed-empty-bundle_fail: zero-byte bundle
+: > "$NEGATIVE/malformed-empty-bundle_fail/bundle.sig"
+
+# malformed-missing-envelope_fail: valid JSON with mediaType + verificationMaterial but no dsseEnvelope
+cat > "$NEGATIVE/malformed-missing-envelope_fail/bundle.sig" <<'ENDJSON'
+{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{"publicKey":{"hint":"e8450dec4eb99dae995da9af1bc2cc9f76ed669ee2e744f57abba763df3e3f8e"},"tlogEntries":[]}}
+ENDJSON
+
+# malformed-wrong-predicate_fail: valid bundle structure but predicateType swapped
+"$PYTHON_BIN" -c "
+import json, base64
+bundle = json.loads(open('$NEGATIVE/../positive/key-simple/bundle.sig').read())
+payload = json.loads(base64.b64decode(bundle['dsseEnvelope']['payload']))
+payload['predicateType'] = 'https://example.com/wrong-predicate/v1.0'
+bundle['dsseEnvelope']['payload'] = base64.b64encode(json.dumps(payload, indent=2).encode()).decode()
+open('$NEGATIVE/malformed-wrong-predicate_fail/bundle.sig', 'w').write(json.dumps(bundle))
+"
+
+# certificate-expired_fail: sign with an expired cert (notAfter: 2020-01-02)
+# Cannot use sign_with_python() because it hardcodes key material from $KEYS.
+EXPIRED_KEYS="$ASSETS/keys/expired"
+TMPDIR_EX="$(mktemp -d)"
+cp "$ASSETS/models/simple/signme-1" "$ASSETS/models/simple/signme-2" "$TMPDIR_EX/"
+echo "  [PYTHON] sign certificate (expired) → $NEGATIVE/certificate-expired_fail/bundle.sig"
+"$PYTHON_BIN" -m model_signing sign certificate \
+    --signature "$NEGATIVE/certificate-expired_fail/bundle.sig" \
+    --private_key "$EXPIRED_KEYS/signing-key.pem" \
+    --signing_certificate "$EXPIRED_KEYS/signing-key-cert.pem" \
+    --certificate_chain "$KEYS/int-ca-cert.pem" \
+    "$TMPDIR_EX"
+rm -rf "$TMPDIR_EX"
+
+echo ""
 echo "Done! All pre-committed bundles generated."
 echo ""
 echo "Spot-check: Go verifies canonical bundles (proves spec compliance + cross-language interop):"
