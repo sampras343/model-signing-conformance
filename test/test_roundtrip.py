@@ -14,9 +14,23 @@ from pathlib import Path
 import pytest
 
 from .client import ModelSigningClient, CaseConfig
-from .conftest import validate_bundle_structure
+from .schema_validator import validate_bundle, decode_payload
 
 ASSETS = Path(__file__).parent / "assets"
+
+
+def _assert_resources_sorted(bundle_path: Path) -> None:
+    """Assert resource descriptors in the predicate are sorted by name."""
+    import json
+    bundle = json.loads(bundle_path.read_text())
+    statement = decode_payload(bundle)
+    resources = statement.get("predicate", {}).get("resources", [])
+    names = [r["name"] for r in resources]
+    assert names == sorted(names), (
+        f"Resource descriptors must be lexicographically sorted by name.\n"
+        f"  got: {names}\n"
+        f"  want: {sorted(names)}"
+    )
 
 
 @pytest.mark.signing
@@ -54,7 +68,8 @@ def test_roundtrip(
     )
     assert bundle_path.exists(), f"bundle.sig not created after signing for {roundtrip_dir.name}"
 
-    validate_bundle_structure(bundle_path, cfg.method)
+    validate_bundle(bundle_path, method=cfg.method)
+    _assert_resources_sorted(bundle_path)
 
     # For ignore-unsigned tests: add an unsigned file after signing
     verify_block = cfg.verify

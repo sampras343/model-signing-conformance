@@ -1,10 +1,10 @@
 # Conformance Test Cases
 
-Reference document for all 49 test cases in the model-signing conformance suite.
+Reference document for all 50 test cases in the model-signing conformance suite.
 
 **Suite layout:**
-- **29 `verify` tests** — use pre-committed bundles (signed offline, committed to this repo). Every client verifies the same bundles. Passing a verify test proves the client correctly implements the wire format and the verification logic for that scenario.
-- **20 `roundtrip` tests** — live sign-then-verify. The client signs a model during the test and immediately verifies it. These prove the signing path is correct and interoperable with the verification path. Each roundtrip test also validates the produced bundle's internal structure (media type, DSSE envelope, in-toto statement, resource descriptor ordering).
+- **32 `verify` tests** — use pre-committed bundles (signed offline, committed to this repo). Every client verifies the same bundles. Passing a verify test proves the client correctly implements the wire format and the verification logic for that scenario.
+- **18 `roundtrip` tests** — live sign-then-verify. The client signs a model during the test and immediately verifies it. These prove the signing path is correct and interoperable with the verification path. Each roundtrip test also validates the produced bundle's internal structure (media type, DSSE envelope, in-toto statement, resource descriptor ordering).
 
 **Cross-language interoperability** is tested in two ways:
 - **Implicit**: Python-signed bundles in `verify/positive/` are verified by every client. Passing proves the client can read bundles from the Python reference implementation.
@@ -207,6 +207,30 @@ relaxations.
 **Expected outcome:** Exit 0.
 
 **Impact if it fails:** Same as above — certificate-signed bundles from `v1.0.0` in production are unverifiable.
+
+---
+
+#### `historical-v1.0.1-elliptic-key`
+
+**What it tests:** Verifies a key-signed bundle from Go `v1.0.1`, the last release without `ignore_paths` in the predicate body.
+
+**Why it exists:** `v1.0.1` was a patch release that still excluded `ignore_paths` from the serialization block. The model directory contains `ignore-me` which must be excluded via the CLI `--ignore-paths` flag, not via predicate metadata. This tests the transition point before `v1.1.0` added predicate-level ignore paths.
+
+**Expected outcome:** Exit 0.
+
+**Impact if it fails:** Bundles from `v1.0.1` deployments are unverifiable. Indicates a regression in handling bundles that lack `ignore_paths` in the predicate while still requiring path exclusion at verify time.
+
+---
+
+#### `historical-v1.0.1-certificate`
+
+**What it tests:** Verifies a certificate-signed bundle from Go `v1.0.1`.
+
+**Why it exists:** Same transition-point coverage as `historical-v1.0.1-elliptic-key`, but for the certificate signing method.
+
+**Expected outcome:** Exit 0.
+
+**Impact if it fails:** Certificate-signed bundles from `v1.0.1` are unverifiable.
 
 ---
 
@@ -452,7 +476,11 @@ Organized into three sub-categories: model tampering, cryptographic/key mismatch
 
 These tests call `sign-model` followed immediately by `verify-model` within the same test run. They prove the client's signing and verification paths are consistent with each other. The model is copied to a temporary directory before signing so the original assets are not modified.
 
-**Bundle structure validation:** After every successful sign, the test validates the produced bundle's internal structure — media type prefix, DSSE envelope presence, in-toto statement shape, predicate type, resource descriptor presence and sort order. This catches clients that produce bundles with correct exit codes but wrong wire format (e.g., missing predicate fields, unsorted resource descriptors, wrong media type).
+**Bundle structure validation:** After every successful sign, the produced bundle is validated against the OMS JSON Schemas (via `oms-schemas`). This catches clients that produce bundles with wrong media types, missing predicate fields, incorrect `verificationMaterial` structure, or unsorted resource descriptors — even when the client's own verify command accepts them. Specifically:
+- Outer bundle validated against `bundle.schema.json` (media type, DSSE envelope, verification material)
+- Decoded DSSE payload validated against `statement.schema.json` (in-toto statement, OMS predicate, resources, serialization)
+- Method-specific assertion: `verificationMaterial` contains the correct field for the signing method (`publicKey` for key, `x509CertificateChain` for certificate)
+- Resource descriptors are asserted to be lexicographically sorted by name
 
 ---
 
@@ -538,20 +566,6 @@ These tests call `sign-model` followed immediately by `verify-model` within the 
 
 ---
 
-#### `key-nested`
-
-**What it tests:** Key roundtrip on a multi-level directory structure.
-
-**Setup:** Uses `models/multi-file` (same as `key-multi-file`), but tests the nested directory traversal explicitly.
-
-**Why it exists:** A separate test from `key-multi-file` to isolate nested-directory handling. While the model fixture is currently the same, this test can evolve independently to add deeper nesting without affecting the multi-file baseline test.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Paths in bundle use `/` separator and are relative to model root.
-
-**Impact if it fails:** Deeply nested models fail to sign or verify correctly.
-
----
-
 #### `certificate-multi-file`
 
 **What it tests:** Certificate roundtrip on a multi-file model with subdirectories.
@@ -561,20 +575,6 @@ These tests call `sign-model` followed immediately by `verify-model` within the 
 **Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["config.json", "subdir/adapter.bin", "weights.bin"]`.
 
 **Impact if it fails:** Certificate-signed multi-file models (the most common enterprise scenario) cannot be used.
-
----
-
-#### `certificate-chain-verification`
-
-**What it tests:** Certificate roundtrip with an explicit full chain (leaf → intermediate → root), verifying that the intermediate CA is correctly handled.
-
-**Setup:** Provides `int-ca-cert.pem` explicitly in `cert_chain` alongside the root CA. This is distinct from `certificate-simple` which also provides the chain but is less explicit about the intermediate CA role.
-
-**Why it exists:** Some PKI implementations have subtle bugs where they only validate the leaf against the root, skipping the intermediate. This test ensures the full chain is traversed: leaf cert → signed by intermediate CA → intermediate CA → signed by root CA → root CA is trusted.
-
-**Expected outcome:** Sign exits 0. Verify exits 0.
-
-**Impact if it fails:** Bundles signed with 3-tier PKI hierarchies (standard in enterprise environments) fail verification. Root CA verification appears to pass but intermediate chain validation is skipped.
 
 ---
 
@@ -774,8 +774,8 @@ All test cases use a unified `config.json` schema with nested `sign` and `verify
 |---|---|
 | Verify — positive | 8 |
 | Verify — negative (failure detection) | 14 |
-| Verify — historical regression | 8 |
-| Roundtrip | 20 |
+| Verify — historical regression | 10 |
+| Roundtrip | 18 |
 | **Total** | **50** |
 
 ---

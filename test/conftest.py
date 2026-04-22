@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from .client import ModelSigningClient
-from .schema_validator import validate_bundle
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -68,16 +67,6 @@ def client(request: pytest.FixtureRequest) -> ModelSigningClient:
     return ModelSigningClient(
         entrypoint=request.config.getoption("--entrypoint"),
     )
-
-
-def validate_bundle_structure(bundle_path: Path, method: str) -> None:
-    """Validate a produced bundle against the OMS spec schemas.
-
-    Runs two-level validation (bundle structure + decoded statement)
-    plus method-specific field assertions. Called after every successful
-    sign operation in roundtrip tests.
-    """
-    validate_bundle(bundle_path, method=method)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
