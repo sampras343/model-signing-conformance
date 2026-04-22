@@ -24,15 +24,39 @@ inputs:
       Example:
         xfail: |
           test_roundtrip[certificate-simple]
-          test_verify[historical-v0.2.0-certificate]
+          test_verify[historical/historical-v0.2.0-certificate]
     default: ''
 
   skip-result-upload:
     description: >
       Set to 'true' to skip uploading the conformance-report.json artifact.
-      Useful for testing the action locally.
     default: 'false'
 
 runs:
-  using: 'python3'
-  main: 'action.py'
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install conformance suite dependencies
+      shell: bash
+      run: pip install -q -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Run conformance tests
+      shell: bash
+      run: python "${{ github.action_path }}/action.py"
+      env:
+        INPUT_ENTRYPOINT: ${{ inputs.entrypoint }}
+        INPUT_SKIP_SIGNING: ${{ inputs.skip-signing }}
+        INPUT_XFAIL: ${{ inputs.xfail }}
+        INPUT_SKIP_RESULT_UPLOAD: ${{ inputs.skip-result-upload }}
+
+    - name: Upload conformance report
+      if: ${{ always() && inputs.skip-result-upload != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: conformance-report
+        path: conformance-report.json
+        if-no-files-found: warn

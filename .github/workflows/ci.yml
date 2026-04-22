@@ -21,21 +21,11 @@ jobs:
       - name: Install model-signing (Python reference implementation)
         run: pip install model-signing
 
-      - name: Install conformance suite dependencies
-        run: pip install -r requirements.txt
+      - name: Make selftest-client executable
+        run: chmod +x selftest-client
 
-      - name: Run conformance suite with selftest-client
-        run: |
-          chmod +x selftest-client
-          python action.py
-        env:
-          INPUT_ENTRYPOINT: ${{ github.workspace }}/selftest-client
-          INPUT_SKIP_RESULT_UPLOAD: 'true'
-
-      - name: Upload conformance report
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Run conformance suite
+        uses: ./
         with:
-          name: conformance-report-selftest
-          path: conformance-report.json
-          if-no-files-found: warn
+          entrypoint: ${{ github.workspace }}/selftest-client
+          skip-result-upload: 'true'

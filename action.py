@@ -19,11 +19,25 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(f"INPUT_{name.upper().replace('-', '_')}", default)
 
 
+def _install_deps() -> None:
+    """Install conformance suite dependencies from requirements.txt."""
+    import subprocess
+    req_file = Path(__file__).parent / "requirements.txt"
+    if not req_file.exists():
+        return
+    print("Installing conformance suite dependencies...", flush=True)
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "-q", "-r", str(req_file)],
+    )
+
+
 def main() -> int:
     entrypoint = _env("entrypoint")
     if not entrypoint:
         print("::error::Input 'entrypoint' is required", flush=True)
         return 1
+
+    _install_deps()
 
     skip_signing = _env("skip-signing", "false").lower() == "true"
     xfail = _env("xfail", "")
