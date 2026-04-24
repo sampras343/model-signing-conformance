@@ -1,0 +1,1 @@
+Python model_signing silently follows symlinks pointing outside the model root (spec §6.1.1 violation: MUST report an error)

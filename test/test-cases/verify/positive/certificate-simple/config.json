@@ -1,0 +1,14 @@
+{
+  "description": "Baseline certificate-based verification with 3-level PKI chain",
+  "method": "certificate",
+  "model": "models/simple",
+  "expected_signed_files": ["signme-1", "signme-2"],
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ],
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

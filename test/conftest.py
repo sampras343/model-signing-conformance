@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from .client import ModelSigningClient
 
 ASSETS = Path(__file__).parent / "assets"
+TEST_CASES = Path(__file__).parent / "test-cases"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -43,7 +45,6 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         if item.config.getoption("--skip-signing"):
             pytest.skip("Skipping sign+verify test (--skip-signing)")
 
-    # Apply xfail from --xfail option
     xfail_list_raw = item.config.getoption("--xfail")
     if xfail_list_raw:
         separators = "\n,"
@@ -53,7 +54,6 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
             for x in xfail_list_raw.split(sep)
             if x.strip()
         ]
-        # Match against the test's node id or parametrize id
         for xfail_id in xfail_ids:
             if xfail_id in item.nodeid or item.name.startswith(xfail_id):
                 item.add_marker(
@@ -69,11 +69,25 @@ def client(request: pytest.FixtureRequest) -> ModelSigningClient:
     )
 
 
+def _load_test_id(case_dir: Path, category: str | None = None) -> str:
+    """Build a pytest ID from the config description, falling back to dir name."""
+    config_path = case_dir / "config.json"
+    base = f"{category}/{case_dir.name}" if category else case_dir.name
+    if config_path.exists():
+        try:
+            data = json.loads(config_path.read_text())
+            desc = data.get("description", "")
+            if desc:
+                return f"{base} | {desc}"
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return base
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    """Parametrize verify_dir and roundtrip_dir from asset directory listings."""
+    """Parametrize verify_dir and roundtrip_dir from test-cases/ listings."""
     if "verify_dir" in metafunc.fixturenames:
-        verify_root = ASSETS / "verify"
-        # Collect test cases from categorized subdirectories
+        verify_root = TEST_CASES / "verify"
         categories = ["positive", "negative", "historical"]
         dirs = []
         ids = []
@@ -83,10 +97,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                 for d in sorted(category_dir.iterdir()):
                     if d.is_dir():
                         dirs.append(d)
-                        ids.append(f"{category}/{d.name}")
+                        ids.append(_load_test_id(d, category))
         metafunc.parametrize("verify_dir", dirs, ids=ids)
 
     if "roundtrip_dir" in metafunc.fixturenames:
-        roundtrip_root = ASSETS / "roundtrip"
+        roundtrip_root = TEST_CASES / "roundtrip"
         dirs = sorted(d for d in roundtrip_root.iterdir() if d.is_dir())
-        metafunc.parametrize("roundtrip_dir", dirs, ids=[d.name for d in dirs])
+        ids = [_load_test_id(d) for d in dirs]
+        metafunc.parametrize("roundtrip_dir", dirs, ids=ids)

@@ -1,0 +1,14 @@
+{
+  "description": "FAIL: Rejection of structurally valid but incomplete/truncated bundle",
+  "method": "key",
+  "model": "models/simple",
+  "expect": "fail",
+  "model_modifications": {
+    "delete": [
+      "ignore-me"
+    ]
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
+}

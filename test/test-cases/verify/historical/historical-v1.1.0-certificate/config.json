@@ -1,0 +1,15 @@
+{
+  "description": "Backwards compatibility: certificate-signed bundle from Go v1.1.0 (with ignore_paths in predicate)",
+  "method": "certificate",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "expected_signed_files": ["signme-1", "signme-2"],
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ],
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}
