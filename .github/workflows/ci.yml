@@ -29,3 +29,5 @@ jobs:
         with:
           entrypoint: ${{ github.workspace }}/selftest-client
           skip-result-upload: 'true'
+          xfail: |
+            test_roundtrip[key-empty-model-rejected

@@ -1,13 +1,18 @@
 {
-  "description": "Backwards compatibility: sigstore-signed bundle from Go v1.1.0 (with ignore_paths in predicate)",
+  "description": "FAIL: Sigstore bundle must reject tampered model content (§7 — root digest mismatch)",
   "method": "sigstore",
   "model": "model",
   "model_relative_to": "test_dir",
+  "expect": "fail",
   "requires_ci": true,
   "verify": {
     "identity": "stefanb@us.ibm.com",
     "identity_provider": "https://sigstore.verify.ibm.com/oauth2",
     "ignore_paths": ["ignore-me"]
   },
-  "expected_signed_files": ["signme-1", "signme-2"]
+  "model_modifications": {
+    "tamper": {
+      "signme-1": "tampered content that should cause digest mismatch"
+    }
+  }
 }

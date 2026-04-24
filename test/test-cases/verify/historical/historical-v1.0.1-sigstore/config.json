@@ -1,5 +1,5 @@
 {
-  "description": "Backwards compatibility: sigstore-signed bundle from Go v1.1.0 (with ignore_paths in predicate)",
+  "description": "Backwards compatibility: sigstore-signed bundle from Go v1.0.1 (with ignore_paths in predicate)",
   "method": "sigstore",
   "model": "model",
   "model_relative_to": "test_dir",

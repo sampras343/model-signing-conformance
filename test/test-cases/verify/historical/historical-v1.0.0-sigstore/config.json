@@ -1,0 +1,12 @@
+{
+  "description": "Backwards compatibility: sigstore-signed bundle from Go v1.0.0 (first stable release)",
+  "method": "sigstore",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "requires_ci": true,
+  "verify": {
+    "identity": "stefanb@us.ibm.com",
+    "identity_provider": "https://sigstore.verify.ibm.com/oauth2"
+  },
+  "expected_signed_files": ["signme-1", "signme-2"]
+}

@@ -11,13 +11,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-from .client import ModelSigningClient, CaseConfig
+from .client import ModelSigningClient, CaseConfig, _read_identity_token
 from .schema_validator import validate_bundle, decode_payload
+
+
+def _sigstore_token_available() -> bool:
+    return bool(_read_identity_token("SIGSTORE_ID_TOKEN"))
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -83,19 +88,21 @@ def _assert_signature_excluded(bundle_path: Path, model_path: Path) -> None:
 
 @pytest.mark.signing
 def test_roundtrip(
-    client: ModelSigningClient, roundtrip_dir: Path, tmp_path: Path
+    client: ModelSigningClient, roundtrip_dir: Path, tmp_path: Path,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Sign a model then verify the produced bundle with the same client."""
     config_path = roundtrip_dir / "config.json"
     if not config_path.exists():
         pytest.fail(f"Missing config.json in {roundtrip_dir}")
 
-    xfail_path = roundtrip_dir / "xfail_reason.txt"
-    if xfail_path.exists():
-        pytest.xfail(xfail_path.read_text().strip())
-
     cfg = CaseConfig.from_json(config_path)
     label = f"{roundtrip_dir.name}: {cfg.description}"
+
+    if cfg.method == "sigstore" and request.config.getoption("--skip-sigstore"):
+        pytest.skip(f"[{label}] skipped (--skip-sigstore)")
+    if cfg.requires_ci and not _sigstore_token_available():
+        pytest.skip(f"[{label}] requires OIDC token (set SIGSTORE_ID_TOKEN or SIGSTORE_ID_TOKEN_FILE)")
 
     model_src = ASSETS / cfg.model
     if not model_src.exists():

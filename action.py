@@ -40,6 +40,7 @@ def main() -> int:
     _install_deps()
 
     skip_signing = _env("skip-signing", "false").lower() == "true"
+    skip_sigstore = _env("skip-sigstore", "false").lower() == "true"
     xfail = _env("xfail", "")
     skip_upload = _env("skip-result-upload", "false").lower() == "true"
 
@@ -59,6 +60,9 @@ def main() -> int:
 
     if skip_signing:
         pytest_args.append("--skip-signing")
+
+    if skip_sigstore:
+        pytest_args.append("--skip-sigstore")
 
     if xfail.strip():
         pytest_args.append(f"--xfail={xfail}")

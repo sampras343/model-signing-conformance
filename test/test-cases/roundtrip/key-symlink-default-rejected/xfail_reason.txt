@@ -1,1 +1,0 @@
-Python model_signing follows symlinks instead of rejecting them (spec §6.1.1: allow_symlinks defaults to false, signers MUST reject any symlink)
