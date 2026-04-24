@@ -1,5 +1,5 @@
 {
-  "description": "FAIL: Rejection of bundles with incorrect mediaType field (wrong version)",
+  "description": "FAIL: Rejection of bundles with invalid mediaType field (not a Sigstore bundle media type)",
   "method": "key",
   "model": "models/simple",
   "expect": "fail",
