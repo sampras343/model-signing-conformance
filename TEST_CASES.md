@@ -1,820 +1,875 @@
-# Conformance Test Cases
+# Conformance test cases
 
-Reference document for all 50 test cases in the model-signing conformance suite.
+**55 tests** total: **23 roundtrip** (live sign, then verify) and **32 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in [`SPEC.md`](SPEC.md); section references below use the same numbering as that spec.
 
-**Suite layout:**
-- **32 `verify` tests** — use pre-committed bundles (signed offline, committed to this repo). Every client verifies the same bundles. Passing a verify test proves the client correctly implements the wire format and the verification logic for that scenario.
-- **18 `roundtrip` tests** — live sign-then-verify. The client signs a model during the test and immediately verifies it. These prove the signing path is correct and interoperable with the verification path. Each roundtrip test also validates the produced bundle's internal structure (media type, DSSE envelope, in-toto statement, resource descriptor ordering).
-
-**Cross-language interoperability** is tested in two ways:
-- **Implicit**: Python-signed bundles in `verify/positive/` are verified by every client. Passing proves the client can read bundles from the Python reference implementation.
-- **Explicit**: Go-signed bundles (`key-simple-go`, `certificate-simple-go`) in `verify/positive/` prove the reverse direction — clients can also verify bundles produced by the Go implementation.
+**oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
 ---
 
-## Category 1: Verify Tests (`test/assets/verify/`)
+## Spec coverage matrix
 
-These tests call `verify-model` only. The bundle is pre-committed to the repo.
-
-Tests are organized in three subdirectories:
-- `positive/` — 8 tests that must succeed (exit 0)
-- `negative/` — 14 tests that must fail (exit non-zero)
-- `historical/` — 8 backwards compatibility tests
-
-### Positive Cases (`verify/positive/`) — verification must succeed (exit 0)
+| Spec Section | Requirement | Test(s) | Status |
+|---|---|---|---|
+| §4.1 | key method — publicKey in verificationMaterial | All key roundtrip + verify tests | Covered |
+| §4.1 | certificate method — x509CertificateChain | certificate-simple, certificate-multi-file, etc. | Covered |
+| §4.1 | sigstore method — certificate + tlogEntries | historical-v1.1.0-sigstore | Covered (xfail) |
+| §4.1 | Accept hint or rawBytes in publicKey | historical-v0.3.1/v1.0.0 (rawBytes) vs v1.1.0 (hint) | Covered |
+| §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
+| §4.1 | Certificate validity period enforced | certificate-expired_fail | Covered |
+| §4.1 | Method-specific verificationMaterial match | key-verify-as-certificate_fail | Covered |
+| §4.2 | EC P-384 key support | key-p384 | Covered |
+| §4.2 | EC P-521 key support | key-p521 | Covered |
+| §5.1 | predicateType exact match | malformed-wrong-predicate_fail | Covered |
+| §5.1 | Deprecated v0.1 backward compat | historical-v0.2.0-certificate | Covered |
+| §5.2.1 | resources minItems 1 | Schema validation (all roundtrip/positive) | Covered |
+| §5.2.1 | resources sorted by name | _assert_resources_sorted (all roundtrip) | Covered |
+| §5.2.1 | Only regular files, no directory entries | Implicit in all tests | Covered |
+| §5.2.2 | serialization required fields | Schema validation | Covered |
+| §6.1 | Recursive file enumeration | key-multi-file | Covered |
+| §6.1 | Model MUST have ≥1 file after exclusions | key-empty-model-rejected | Covered (xfail) |
+| §6.1.1 | Symlink rejected by default (allow_symlinks=false) | key-symlink-default-rejected | Covered (xfail) |
+| §6.1.1 | Out-of-root symlink MUST error | key-symlink-outside-root | Covered (xfail) |
+| §6.1.1 | Symlink cycle MUST error | key-symlink-cycle | Covered (xfail) |
+| §6.1.2 | Forward slash path separator | All multi-file tests | Covered |
+| §6.1.2 | Paths relative to model root | key-multi-file (subdir/adapter.bin) | Covered |
+| §6.1.2 | Single-file basename only | key-single-file | Covered |
+| §6.1.2 | Case-sensitive comparison | Implicit | Covered |
+| §6.1.2 | UTF-8 filenames | key-unicode-filename | Covered |
+| §6.2 | Default git path exclusions | key-default-ignores | Covered |
+| §6.2 | Non-git dotfiles NOT excluded | key-dotfile-included | Covered |
+| §6.2 | Hidden subdirectories NOT excluded | key-files-in-hidden-dir | Covered |
+| §6.2 | User --ignore-paths | key-ignore-paths | Covered |
+| §6.2 | Signature file auto-exclusion | key-sig-inside-model | Covered |
+| §6.2.1 | Top-level matching for default excludes | key-default-ignores | Covered |
+| §6.2.1 | Exact relative path for user ignores | key-ignore-paths | Covered |
+| §6.3.1 | File serialization (files method) | All roundtrip tests | Covered |
+| §6.3.2 | Shard serialization (file-shard-N) | — | Not covered (client limitation) |
+| §6.4 | Resource descriptors sorted by name | _assert_resources_sorted (all roundtrip) | Covered |
+| §6.5.1 | Root digest = SHA-256 of concatenated digests | _assert_root_digest (all roundtrip) | Covered |
+| §7 | sha256 REQUIRED | All tests | Covered |
+| §7 | blake2b OPTIONAL | — | Not covered (optional, not CLI-accessible) |
+| §7 | blake3 OPTIONAL | — | Not covered (optional, not CLI-accessible) |
+| §8.1 | Bundle schema validation | validate_bundle (all positive/roundtrip) | Covered |
+| §8.1 | mediaType validation | key-simple-wrong-mediatype_fail | Covered |
+| §8.2 | Signature vs wrong key | key-simple-wrong-key_fail | Covered |
+| §8.2 | Signature vs wrong CA | certificate-simple-wrong-ca_fail | Covered |
+| §8.3 | Statement validation | Schema validation | Covered |
+| §8.3 | Wrong predicateType rejection | malformed-wrong-predicate_fail | Covered |
+| §8.4 | Tampered content detection | key-simple-tampered-content_fail | Covered |
+| §8.4 | Missing file detection | key-simple-missing-file_fail | Covered |
+| §8.4 | Extra unsigned file detection | key-simple-extra-file_fail | Covered |
+| §8.5 | --ignore-unsigned-files | key-ignore-unsigned, key-simple-ignore-unsigned-files | Covered |
+| §9 | Bundle excluded from signing scope | key-sig-inside-model | Covered |
+| §10 | Conformance (sha256, files, key minimum) | All tests | Covered |
+| §11 | Historical backward compatibility | 10 historical tests (v0.2.0–v1.1.0) | Covered |
+| §11 | Deterministic signing | key-simple-deterministic | Covered |
 
 ---
+
+## Category 1: Verify tests
+
+Paths are under `test/test-cases/verify/…` unless noted. “Verify” means the client checks a pre-built bundle and model without signing in that run.
+
+### Positive cases (8)
 
 #### `key-simple`
+**Spec:** §4.1, §6.2, §8.1–§8.4
 
-**What it tests:** Baseline key-based verification against a two-file model.
+**What it tests:** Baseline key-based verification for a two-file model where one path is excluded from the signed set.
 
-**Setup:** Model has three files (`signme-1`, `signme-2`, `ignore-me`). Bundle was signed with `ignore-me` excluded. Verified with the matching public key.
+**Setup:** The model includes `signme-1`, `signme-2`, and `ignore-me`. The bundle was produced with `ignore-me` excluded (aligned with the simple fixture’s ignore list). This is an entry-level smoke test for the key method.
 
-**Why it exists:** This is the entry-level smoke test. If this fails, the client cannot perform basic key verification at all. It also exercises the `--ignore-paths` flag during verification (the extra `ignore-me` file must not cause failure).
+**Why it exists:** A minimal passing path must work before more complex cases; it anchors expectations for key material, manifest contents, and verification against the spec’s bundle and integrity rules.
 
-**Expected outcome:** Exit 0. Two files (`signme-1`, `signme-2`) are in the bundle; `ignore-me` is not.
+**Expected outcome:** Exit code 0. The signed contents correspond to the two in-scope files (not `ignore-me`).
 
-**Impact if it fails:** The entire key-based signing and verification feature is broken. No further debugging of other key tests is useful until this passes.
-
----
+**Impact if it fails:** The entire key-based signing and verification feature is effectively broken for normal two-file models.
 
 #### `certificate-simple`
+**Spec:** §4.1, §8.2
 
-**What it tests:** Baseline certificate-based verification against a two-file model.
+**What it tests:** X.509 certificate–chain verification for a bundle signed with a leaf certificate backed by a three-level PKI (leaf, intermediate, root trust anchor).
 
-**Setup:** Bundle was signed with a leaf certificate backed by a 3-level PKI chain (leaf → intermediate CA → root CA). Verified using the root CA certificate as the trust anchor.
+**Setup:** A committed bundle and matching model layout; the client is configured with the appropriate certificate chain and trust material so the full chain can be validated.
 
-**Why it exists:** Mirrors `key-simple` for the certificate signing method. Confirms the client can validate the full certificate chain and match the bundle's signing certificate against the trusted root.
+**Why it exists:** Many deployments use certificate-based identity rather than raw public keys; the client must validate the full chain, not just the signature bytes.
 
-**Expected outcome:** Exit 0.
+**Expected outcome:** Exit code 0; verification succeeds with correct chain and trust.
 
-**Impact if it fails:** The entire certificate-based signing and verification feature is broken. Teams relying on enterprise PKI (common in regulated environments) are blocked.
-
----
+**Impact if it fails:** Certificate-based signing and verification is broken; PKI-backed workflows cannot be trusted.
 
 #### `key-multi-file`
+**Spec:** §6.1, §6.1.2, §6.4
 
-**What it tests:** Key verification on a model with files in subdirectories.
+**What it tests:** Key-based verification on a model with subdirectories and multiple files, including canonical path form and lexicographic resource ordering in the manifest.
 
-**Setup:** Model has `weights.bin`, `config.json`, and `subdir/adapter.bin`. All three are signed. The bundle's `resources` list is verified to contain all three paths with the correct relative names.
+**Setup:** Model contains `weights.bin`, `config.json`, and `subdir/adapter.bin`.
 
-**Why it exists:** Many real models are not flat directories — they have nested structure (HuggingFace format, for example). This test ensures path canonicalization works correctly across subdirectories and that the manifest sort order is deterministic regardless of filesystem traversal order.
+**Why it exists:** Real models are rarely flat; the client must walk the tree, emit stable relative names with `/` separators, and sort resource descriptors deterministically.
 
-**Expected outcome:** Exit 0. Exactly `["config.json", "subdir/adapter.bin", "weights.bin"]` in the bundle.
+**Expected outcome:** Exit code 0. The expected signed file list, sorted, is exactly `["config.json", "subdir/adapter.bin", "weights.bin"]`.
 
-**Impact if it fails:** The client cannot sign or verify models with subdirectories, which covers the majority of real-world model formats.
-
----
+**Impact if it fails:** Models with nested directories cannot be signed or verified reliably.
 
 #### `key-ignore-paths`
+**Spec:** §6.2, §6.2.1
 
-**What it tests:** That `--ignore-paths` correctly excludes files from the signed manifest.
+**What it tests:** That user-supplied `--ignore-paths` correctly excludes files from the signed set and that verification still matches the resulting manifest.
 
-**Setup:** Model has `signme-1`, `signme-2`, and `ignore-me`. The bundle was created with `ignore-me` excluded. `config.json` asserts `expected_signed_files = ["signme-1", "signme-2"]`.
+**Setup:** Model has `signme-1`, `signme-2`, and `ignore-me`. The bundle was created with `ignore-me` excluded.
 
-**Why it exists:** `ignore-me` represents files like metadata, lock files, or auto-generated files that exist in the model directory but must not be part of the integrity guarantee. If `ignore-me` ends up in the bundle, or if its presence breaks verification, the feature is broken.
+**Why it exists:** Authors must omit secrets, build artifacts, or other non-model files from the signed scope; exclusion semantics must be consistent between signing and verification.
 
-**Expected outcome:** Exit 0. Bundle contains exactly `signme-1` and `signme-2`.
+**Expected outcome:** Exit code 0. The bundle contains only `signme-1` and `signme-2` (not `ignore-me`).
 
-**Impact if it fails:** Operators cannot exclude non-model files from signing, leading to spurious verification failures whenever tooling creates auxiliary files in the model directory.
-
----
+**Impact if it fails:** Non-model files cannot be excluded safely; manifests may drift or verification may fail in realistic repos.
 
 #### `key-single-file`
+**Spec:** §6.1.2
 
-**What it tests:** Key verification when the model is a single file (`model.bin`), not a directory.
+**What it tests:** Key-based verification when the “model” is a single file `model.bin`, so the resource name is the filename itself, not a longer relative path.
 
-**Why it exists:** Some model artifacts are single binary files rather than directories. The canonicalization path for a single-file model is different — the resource name is the filename itself, not a relative path. This test ensures that code path is not neglected.
+**Setup:** Single-file model fixture with only `model.bin` at the model root (as defined by the test assets).
 
-**Expected outcome:** Exit 0. Bundle contains exactly `["model.bin"]`.
+**Why it exists:** Many artifact formats (e.g. ONNX, GGUF) are shipped as one file; the spec’s single-file naming rules must be exercised.
 
-**Impact if it fails:** Clients cannot sign or verify single-file models (e.g., ONNX exports, GGUF quantized models).
+**Expected outcome:** Exit code 0. The manifest lists `["model.bin"]` as the resource name.
 
----
+**Impact if it fails:** Single-file models cannot be signed or verified correctly.
 
 #### `key-simple-ignore-unsigned-files`
+**Spec:** §8.5
 
-**What it tests:** The `--ignore-unsigned-files` flag allows extra unsigned files to pass verification.
+**What it tests:** The `--ignore-unsigned-files` flag, allowing extra files present on disk that are not in the signed manifest to be ignored during verification.
 
-**Setup:** The model directory contains `signme-1`, `signme-2`, `ignore-me`, **and** an additional unsigned file (the bundle does not cover all files in the directory). `ignore_unsigned_files: true` is set in the config.
+**Setup:** Same family of layout as the simple case, with an additional unsigned file present alongside signed files; verification is run with the flag enabled as required by the case config.
 
-**Why it exists:** In deployment scenarios, operators may add runtime files (logs, configs, caches) to a model directory after signing. Without `--ignore-unsigned-files`, verification would reject the model even though the signed files are intact. This test proves the flag works correctly.
+**Why it exists:** Deployed directories often gain runtime or auxiliary files that should not break verification when operators opt in to lenient mode.
 
-**Expected outcome:** Exit 0, even though the directory contains unsigned files.
+**Expected outcome:** Exit code 0 even when unsigned files are present, when the flag is set.
 
-**Impact if it fails:** Operators cannot deploy models to directories that may accumulate runtime artifacts; they would be forced to keep the model directory completely frozen post-signing.
-
----
+**Impact if it fails:** Teams cannot deploy signed models into directories with extra runtime artifacts without false verification failures.
 
 #### `key-simple-go`
+**Spec:** §4.1, §11 (cross-client interop)
 
-**What it tests:** Cross-client interoperability — verifies a bundle signed by the Go implementation using key-based signing.
+**What it tests:** That a bundle produced by the Go implementation (key method) verifies successfully with the client under test, using the same logical model and key material as the baseline `key-simple` case.
 
-**Setup:** Uses the same `models/simple` model and `signing-key-pub.pem` as `key-simple`, but the bundle was signed by the Go adapter (not Python). Generated by `tools/generate-verify-assets.sh`.
+**Setup:** A Go-generated bundle for the simple model; same key relationship as `key-simple`.
 
-**Why it exists:** `key-simple` proves the client can verify Python-signed bundles. This test proves the client can also verify Go-signed bundles. Differences in wire format encoding, resource descriptor ordering, or signature algorithms between implementations would be caught here. Together with `key-simple`, this establishes bidirectional interop.
+**Why it exists:** The ecosystem includes multiple signers; verification must be interoperable across implementations and languages.
 
-**Expected outcome:** Exit 0. The Go-signed bundle is structurally and cryptographically valid from the verifier's perspective.
+**Expected outcome:** Exit code 0.
 
-**Impact if it fails:** The Go and test client implementations produce or consume incompatible wire formats for key-based signing. Cross-language model provenance is broken.
-
----
+**Impact if it fails:** Cross-language, key-based interoperability is broken (Go-signed bundles not accepted by this client).
 
 #### `certificate-simple-go`
+**Spec:** §4.1, §11 (cross-client interop)
 
-**What it tests:** Cross-client interoperability — verifies a certificate-signed bundle produced by the Go implementation.
+**What it tests:** That a Go-produced certificate-method bundle verifies successfully with the client under test.
 
-**Setup:** Uses the same `models/simple` model and `ca-cert.pem` trust anchor as `certificate-simple`, but the bundle was signed by the Go adapter with its own certificate embedding. Generated by `tools/generate-verify-assets.sh`.
+**Setup:** A committed Go-generated certificate bundle and matching model and trust configuration.
 
-**Why it exists:** Certificate-signed bundles embed the signing certificate chain inside the bundle. Different implementations may embed the chain differently (e.g., `publicKey` vs `x509CertificateChain` in `verificationMaterial`). This test ensures the verifier can handle both embedding styles.
+**Why it exists:** Certificate signing must work across toolchains, not only for bundles created by a single language.
 
-**Expected outcome:** Exit 0.
+**Expected outcome:** Exit code 0.
 
-**Impact if it fails:** Cross-language certificate-based signing interop is broken. Enterprise PKI-based signing with mixed Go/Python toolchains fails.
+**Impact if it fails:** Cross-language certificate interoperability is broken.
 
----
+### Historical cases (10)
 
-### Historical Regression Cases (`verify/historical/`) — backwards compatibility
-
-These tests use bundles generated by specific older Go releases. They prove that the current implementation can still read bundles produced by every previous release. Bundles are committed to this repo and never regenerated.
-
-**Note:** Historical bundles may not conform to the current OMS schema
-(`schemas/bundle.schema.json` in the spec repo). Known differences in
-older versions:
-- **`tlogEntries`:** Required only for the `sigstore` method. For
-  `key`/`certificate` methods it is optional and MAY be absent (some
-  clients include an empty array, others omit it entirely — both are valid).
-- **Pre-v1.1.0:** `signatures[].keyid` may be `null` instead of `""`.
-- **v0.2.0:** Uses deprecated `predicateType` (`https://model_signing/Digests/v0.1`)
-  with a different predicate structure.
-
-See `spec.md` §11 (Bundle Version History) for the full list of verifier
-relaxations.
-
----
+> **Note:** Historical bundles may not match every detail of the current OMS JSON Schema. Known differences include: `tlogEntries` may be optional for key/certificate material in older bundles, `keyid` may be null in bundles produced before v1.1.0, and v0.2.0 uses a deprecated `predicateType`. The suite still requires these to verify when marked pass.
 
 #### `historical-v0.2.0-certificate`
+**Spec:** §5.1, §11
 
-**What it tests:** Verifies a certificate-signed bundle produced by Go `v0.2.0`.
+**What it tests:** Backward compatibility with a certificate bundle produced by the Go client at v0.2.0 (the first release using the Sigstore-style bundle format), using the older predicate and schema-era conventions.
 
-**Why it exists:** `v0.2.0` was the first release to use the Sigstore bundle format. Its bundle structure predates several schema changes. The Python reference implementation added a compatibility layer (`payload_compat.go`) to read it. This test ensures both old and new clients can read the oldest supported format.
+**Setup:** A frozen bundle and model from that era; no live signing in this test.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** Production data from the earliest supported format must remain verifiable so long-lived artifacts stay auditable.
 
-**Impact if it fails:** Bundles signed in production with `v0.2.0` can no longer be verified. Customers on long-lived model archives are affected.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** The oldest production bundles in the wild would become unverifiable.
 
 #### `historical-v0.3.1-elliptic-key`
+**Spec:** §11
 
-**What it tests:** Verifies a key-signed (elliptic curve) bundle from Go `v0.3.1`.
+**What it tests:** The oldest key-signed (EC) bundle format from Go v0.3.1, which introduced key-based signing.
 
-**Why it exists:** `v0.3.1` introduced key-based signing. This is the oldest key-signed bundle format. Tests that the elliptic key path was not silently broken by later refactors.
+**Setup:** Committed v0.3.1 key bundle and matching model.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** v0.3.x was the first key-signing line; many historical artifacts may use this shape.
 
-**Impact if it fails:** Bundles from `v0.3.1` cannot be verified. Any model signed during the `v0.3.x` lifecycle is unverifiable.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** v0.3.x key-signed bundles cannot be verified.
 
 #### `historical-v0.3.1-certificate`
+**Spec:** §11
 
-**What it tests:** Verifies a certificate-signed bundle from Go `v0.3.1`.
+**What it tests:** A certificate bundle from v0.3.1, paired with the key case to cover the certificate path in the same release generation.
 
-**Expected outcome:** Exit 0.
+**Setup:** Committed v0.3.1 certificate bundle and model.
 
-**Impact if it fails:** Certificate-signed bundles from the `v0.3.x` era cannot be verified.
+**Why it exists:** Both key and certificate flows must remain compatible for that generation.
 
----
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** v0.3.x certificate bundles cannot be verified.
 
 #### `historical-v1.0.0-elliptic-key`
+**Spec:** §11
 
-**What it tests:** Verifies a key-signed bundle from Go `v1.0.0`, the first stable release.
+**What it tests:** A key bundle from v1.0.0, the first stable OMS release line and the most widely deployed key-signed shape.
 
-**Why it exists:** `v1.0.0` was the first semver-stable release. Bundles from this release are likely the most widely deployed. Breaking this is a high-severity regression.
+**Setup:** v1.0.0 key bundle and assets.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** v1.0.0 is a major compatibility baseline; failures here have the broadest user impact.
 
-**Impact if it fails:** All `v1.0.0`-signed model bundles in production are unverifiable. This is the most impactful of the historical regression tests.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** **Highest severity** among historical lines — a large class of v1.0.0 key bundles would be unverifiable.
 
 #### `historical-v1.0.0-certificate`
+**Spec:** §11
 
-**What it tests:** Verifies a certificate-signed bundle from Go `v1.0.0`.
+**What it tests:** A certificate bundle from v1.0.0, mirroring the key case for the stable release’s certificate method.
 
-**Expected outcome:** Exit 0.
+**Setup:** v1.0.0 certificate bundle and assets.
 
-**Impact if it fails:** Same as above — certificate-signed bundles from `v1.0.0` in production are unverifiable.
+**Why it exists:** Certificate deployments on v1.0.0 need the same guarantee as key deployments.
 
----
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** v1.0.0 certificate bundles would be unverifiable across the board.
 
 #### `historical-v1.0.1-elliptic-key`
+**Spec:** §6.2, §11
 
-**What it tests:** Verifies a key-signed bundle from Go `v1.0.1`, the last release without `ignore_paths` in the predicate body.
+**What it tests:** A v1.0.1 key bundle from the last release that did not carry `ignore_paths` inside the predicate; ignores were applied only via the signer/validator CLI, not embedded in the payload.
 
-**Why it exists:** `v1.0.1` was a patch release that still excluded `ignore_paths` from the serialization block. The model directory contains `ignore-me` which must be excluded via the CLI `--ignore-paths` flag, not via predicate metadata. This tests the transition point before `v1.1.0` added predicate-level ignore paths.
+**Setup:** Model includes `ignore-me` excluded at signing/verification time by flags only, matching the transition-era behavior.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** The suite must cover the hand-off between “CLI-only” ignores and later predicate-embedded `ignore_paths` (v1.1.0+).
 
-**Impact if it fails:** Bundles from `v1.0.1` deployments are unverifiable. Indicates a regression in handling bundles that lack `ignore_paths` in the predicate while still requiring path exclusion at verify time.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** v1.0.1 key bundles would be unverifiable, breaking a common migration step.
 
 #### `historical-v1.0.1-certificate`
+**Spec:** §6.2, §11
 
-**What it tests:** Verifies a certificate-signed bundle from Go `v1.0.1`.
+**What it tests:** The same v1.0.1 transition point as the elliptic key case, for the certificate method.
 
-**Why it exists:** Same transition-point coverage as `historical-v1.0.1-elliptic-key`, but for the certificate signing method.
+**Setup:** v1.0.1 certificate bundle with the same ignore semantics as the key case for that release.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** Both methods must track ignore behavior consistently across the transition.
 
-**Impact if it fails:** Certificate-signed bundles from `v1.0.1` are unverifiable.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** v1.0.1 certificate bundles would be unverifiable.
 
 #### `historical-v1.1.0-elliptic-key`
+**Spec:** §6.2, §11
 
-**What it tests:** Verifies a key-signed bundle from Go `v1.1.0`, the most recent historical release captured.
+**What it tests:** A v1.1.0 key bundle where the predicate includes `ignore_paths`, reflecting the schema evolution after v1.0.1.
 
-**Why it exists:** `v1.1.0` added `ignore_paths` to the predicate. This test ensures the current code correctly reads a bundle that includes `ignore_paths` in the predicate JSON.
+**Setup:** v1.1.0 key bundle; ignores are represented in the signed predicate as well as in verification configuration where applicable.
 
-**Expected outcome:** Exit 0.
+**Why it exists:** Most recent “deployment era” bundles may include embedded ignore paths; clients must handle them.
 
-**Impact if it fails:** Bundles from `v1.1.0` (likely the most common in recent deployments) cannot be verified. Indicates a regression in how `ignore_paths` is deserialized.
+**Expected outcome:** Exit code 0.
 
----
+**Impact if it fails:** The most recent common deployment key bundles would be unverifiable.
 
 #### `historical-v1.1.0-certificate`
+**Spec:** §6.2, §11
 
-**What it tests:** Verifies a certificate-signed bundle from Go `v1.1.0` with `ignore_paths`.
+**What it tests:** A v1.1.0 certificate bundle with the same embedded `ignore_paths` evolution as the key case.
 
-**Expected outcome:** Exit 0.
+**Setup:** v1.1.0 certificate bundle and matching trust path.
 
-**Impact if it fails:** Same as `historical-v1.1.0-elliptic-key`, for the certificate signing path.
+**Why it exists:** Certificate users on the current line need parity with the key path for historical verification.
 
----
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** v1.1.0 certificate bundles would be unverifiable for typical deployments.
 
 #### `historical-v1.1.0-sigstore`
+**Spec:** §4.1, §11
 
-**What it tests:** Verifies a sigstore-signed (keyless) bundle from Python `v1.1.0`. This is the only historical test that exercises the `sigstore` signing method, which uses a Fulcio short-lived certificate, Rekor transparency log entry, and RFC 3161 timestamp.
+**What it tests:** A Sigstore (keyless) bundle from Python v1.1.0 using Fulcio, Rekor, and RFC 3161 timestamping, exercising the “certificate + transparency” method end to end in verify-only mode.
 
-**Why it exists:** The conformance suite's positive and roundtrip tests only cover `key` and `certificate` methods. This test ensures the sigstore bundle format is also preserved across versions.
+**Setup:** Committed sigstore-style bundle; verification typically requires online OIDC/Sigstore and Rekor infrastructure.
 
-**Expected outcome:** Currently xfail — sigstore verification requires OIDC identity/issuer and Sigstore infrastructure that is not available in offline conformance testing.
+**Why it exists:** Real keyless signings exist in the wild; the spec calls out this method, and the suite records expected behavior for environments that can reach the services.
 
-**Impact if it fails:** N/A (xfail). When sigstore verification support is added to the adapter, this test will validate that sigstore-signed bundles from v1.1.0 remain verifiable.
+**Expected outcome:** Marked **xfail** in offline CI — full verification is not available without OIDC/Sigstore infrastructure.
 
----
+**Impact if it fails:** When the test is expected to run in a connected environment, keyless interop is broken; as an xfail, it documents a known harness/environment gap rather than a green conformance bar.
 
-### Negative Cases (`verify/negative/`) — 14, verification must fail (exit non-zero)
-
-These test that the client **correctly rejects** invalid or tampered inputs. Passing means the client returns a non-zero exit code; failing means the client returned exit 0 when it should have rejected the input.
-
-Organized into three sub-categories: model tampering, cryptographic/key mismatch, and structural/malformed bundle.
-
----
+### Negative cases (14)
 
 #### `key-simple-tampered-content_fail`
+**Spec:** §8.4
 
-**What it tests:** Detection of file content modification after signing.
+**What it tests:** That modifying file content after signing is detected: `signme-1` is tampered (e.g. post-sign byte change) so the digest no longer matches the manifest.
 
-**Setup:** `signme-1` in the model directory has been modified after the bundle was created. The digest in the bundle no longer matches the actual file.
+**Setup:** Pre-built bundle and model, with a tamper step applied to `signme-1` before verify.
 
-**Why it exists:** This is the primary security property of model signing — tampering must be detected. If this test fails, the client is not checking file digests against the manifest, and the signing feature provides no integrity guarantee whatsoever.
+**Why it exists:** Detecting post-sign modification is a primary security property of model signing; this is the core integrity check.
 
-**Expected outcome:** Exit non-zero. Error must indicate digest mismatch.
+**Expected outcome:** Non-zero exit; verification must fail (digest mismatch / integrity failure).
 
-**Impact if it fails:** **Critical security failure.** The client silently accepts tampered models, completely defeating the purpose of model signing.
-
----
+**Impact if it fails:** **Critical security failure** — the client could silently accept a tampered model.
 
 #### `key-simple-wrong-key_fail`
+**Spec:** §8.2
 
-**What it tests:** Rejection when the verification key does not match the signing key.
+**What it tests:** Rejection when verification uses a public key that does not correspond to the key that signed the bundle (`wrong-key-pub.pem` or equivalent unrelated EC key material).
 
-**Setup:** The bundle was signed with the standard test key. Verification is attempted using `keys/wrong/wrong-key-pub.pem` (a different, unrelated EC key).
+**Setup:** Valid bundle, but `verify` supplies the wrong public key.
 
-**Why it exists:** Ensures the client validates the DSSE signature cryptographically — not just that a signature exists, but that it was produced by the claimed key. Prevents accepting bundles signed by an untrusted party.
+**Why it exists:** The signature must be bound to the intended publisher; an unrelated key must not “verify” the same payload.
 
-**Expected outcome:** Exit non-zero. Error must indicate signature verification failure.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** **Critical security failure.** The client accepts bundles signed by arbitrary keys, making model provenance unenforceable.
-
----
+**Impact if it fails:** **Critical** — a client might accept a bundle as valid under an arbitrary or attacker-chosen key.
 
 #### `key-simple-missing-file_fail`
+**Spec:** §8.4
 
-**What it tests:** Detection of a missing file that was included in the bundle.
+**What it tests:** Rejection when a file listed in the signed manifest (e.g. `signme-2`) is deleted from the on-disk model after signing but before verify.
 
-**Setup:** `signme-2` was included in the bundle during signing but has been **deleted** from the model directory before verification.
+**Setup:** Post-sign delete of a required file.
 
-**Why it exists:** An attacker could remove a file from a signed model (e.g., a safety filter, a configuration file) without modifying other files. The verifier must detect the absence of files that were part of the original signed manifest.
+**Why it exists:** The manifest promises a full set of files; missing content must fail closed.
 
-**Expected outcome:** Exit non-zero. Error must indicate a file in the bundle is missing from the model directory.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** **Critical security failure.** Attackers can remove components from a signed model without triggering verification failure.
-
----
+**Impact if it fails:** **Critical** — attackers or broken pipelines could remove model components and verification might still pass.
 
 #### `key-simple-extra-file_fail`
+**Spec:** §8.4, §8.5
 
-**What it tests:** Rejection when an unsigned file exists in the model directory (without `--ignore-unsigned-files`).
+**What it tests:** Strict mode without `--ignore-unsigned-files` must reject a model directory that contains an extra file (e.g. `injected.bin`) not present in the signed manifest.
 
-**Setup:** The model directory contains `injected.bin`, which was not present when the bundle was signed and is not in the manifest.
+**Setup:** Pre-verify injection of a new file; verify runs without the lenient unsigned-files option.
 
-**Why it exists:** Detects file injection attacks — an attacker who can write to the model directory could add malicious files. By default, unsigned files must be rejected unless the operator explicitly opts in with `--ignore-unsigned-files`.
+**Why it exists:** Unmodeled files can be supply-chain or data-poisoning attempts; the default must be strict.
 
-**Expected outcome:** Exit non-zero. Error must indicate an unsigned file was found.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** **Security failure.** Attackers can inject arbitrary files into signed model directories and have them accepted as part of the verified model.
-
----
+**Impact if it fails:** **Security failure** — file injection in the model directory would go undetected in the default mode.
 
 #### `certificate-simple-wrong-ca_fail`
+**Spec:** §8.2
 
-**What it tests:** Rejection when the CA certificate used for verification is not the signing CA.
+**What it tests:** Chain validation when the client trusts a wrong root or CA (`wrong-ca-cert.pem` instead of the true issuer), so the path from leaf to trust anchor is invalid.
 
-**Setup:** The bundle was signed with a leaf certificate rooted at the standard test CA. Verification is attempted using `keys/wrong/wrong-ca-cert.pem` (a completely different CA).
+**Setup:** Legitimate cert-signed bundle, but `verify` uses an unrelated CA as trust.
 
-**Why it exists:** Ensures the PKI chain validation is enforced. The signer's certificate must chain up to a trusted root provided by the verifier. This is the foundational property of certificate-based signing — the verifier controls which CAs are trusted.
+**Why it exists:** Trust anchors define who is allowed; substituting a random CA must not produce success.
 
-**Expected outcome:** Exit non-zero. Error must indicate certificate chain validation failure.
+**Expected outcome:** Non-zero exit; chain validation must fail.
 
-**Impact if it fails:** **Critical security failure.** Any certificate-signed bundle is accepted regardless of which CA issued the signing certificate, making the trust anchor meaningless.
-
----
+**Impact if it fails:** **Critical** — any CA’s certificate could be accepted, making the trust store meaningless.
 
 #### `key-simple-corrupted-bundle_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of a bundle file that contains invalid JSON.
+**What it tests:** Handling of a bundle file that is not valid JSON (garbled or structurally invalid while still a “file on disk”).
 
-**Setup:** `bundle.sig` contains literal garbage (`{"not": "valid json}`) — the file is not parseable.
+**Setup:** Committed or generated corrupted bundle content.
 
-**Why it exists:** The client must gracefully handle malformed input rather than crash, panic, or silently succeed. This also guards against accidentally passing an empty or truncated file.
+**Why it exists:** Parsers must reject garbage deterministically; crashes are unacceptable for a security tool.
 
-**Expected outcome:** Exit non-zero. Error must indicate bundle parsing failure (not a crash).
+**Expected outcome:** Non-zero exit; no crash; clear failure.
 
-**Impact if it fails:** Clients may crash or return misleading errors. In pipeline automation, a non-crash but silent success would be a security vulnerability.
-
----
+**Impact if it fails:** Poor robustness (crashes) or spurious success on invalid input, undermining confidence in the implementation.
 
 #### `key-simple-truncated-bundle_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of a bundle file that is structurally valid JSON but incomplete (first 100 bytes of a real bundle).
+**What it tests:** A partial bundle (first 100 bytes of a real bundle) simulating a truncated or incomplete write.
 
-**Setup:** `bundle.sig` is the first 100 bytes of a real bundle, producing a syntactically broken JSON object.
+**Setup:** Truncated copy of a valid bundle.
 
-**Why it exists:** Complements `corrupted-bundle_fail` by testing a different failure mode — a partially-written file (e.g., from an interrupted download or disk-full error) rather than complete garbage. Ensures the client validates bundle completeness, not just parse success.
+**Why it exists:** Partial I/O and transfer failures are common; the client must not treat a half file as a valid signed bundle.
 
-**Expected outcome:** Exit non-zero.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** Clients may accept partially-written bundles, leading to non-deterministic verification results depending on which fields happen to be present in the truncated portion.
-
----
+**Impact if it fails:** Incomplete bundles might be mis-handled, risking wrong security conclusions.
 
 #### `key-simple-wrong-mediatype_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of bundles with an incorrect `mediaType` field.
+**What it tests:** The outer bundle’s `mediaType` is changed to a wrong value (e.g. `v0.1`) in a way that is **outside** the DSSE envelope, so the cryptographic signature on the statement may still be valid for the original bytes, but the **outer** type no longer matches what this client and spec require.
 
-**Setup:** A valid bundle where the `mediaType` field has been changed from `application/vnd.dev.sigstore.bundle.v0.3+json` to `application/vnd.dev.sigstore.bundle.v0.1+json`. The signature remains valid because `mediaType` is outside the DSSE envelope.
+**Setup:** Committed or modified bundle with `mediaType` not matching the expected OMS bundle media type, while the envelope bytes may be unchanged in ways that do not re-sign the payload.
 
-**Why it exists:** The spec (step 2 of verification) requires validating `mediaType`. This field indicates the bundle schema version. Accepting wrong versions could lead to misinterpretation of bundle fields. Since `mediaType` is outside the signed envelope, this must be explicitly checked — signature verification alone won't catch it.
+**Why it exists:** The implementation must not verify only the inner signature in isolation; the bundle wrapper and `mediaType` are part of correct interpretation (§8.1).
 
-**Expected outcome:** Exit non-zero. Error must indicate invalid or unsupported bundle version.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** Clients may misparse bundles from incompatible versions, leading to subtle verification failures or security issues if field semantics differ between versions.
-
----
+**Impact if it fails:** Clients could accept bundles labeled as a different or obsolete outer format, confusing tooling and interop.
 
 #### `key-simple-no-signature_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of bundles with an empty `signatures` array.
+**What it tests:** A bundle where the `signatures` array is empty, so there is no signature to check even if JSON schema might be relaxed.
 
-**Setup:** A bundle where `dsseEnvelope.signatures` has been set to an empty array `[]`. All other fields remain valid.
+**Setup:** Valid JSON object for a bundle with empty `signatures`.
 
-**Why it exists:** Section 2.1 of the spec states "`dsseEnvelope.signatures` MUST contain at least one entry." A bundle without any signatures cannot be verified and must be rejected explicitly. This test ensures clients validate signature presence before attempting cryptographic verification.
+**Why it exists:** Absence of a signature must be a hard failure, not a silent pass or ambiguous state.
 
-**Expected outcome:** Exit non-zero. Error must indicate no signatures present or signature verification failure.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** Clients may crash, return misleading errors, or (worst case) incorrectly report successful verification for unsigned content.
-
----
+**Impact if it fails:** Unsigned or stripped signature lists could be treated as success.
 
 #### `malformed-empty-bundle_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of an empty (zero-byte) file as the bundle.
+**What it tests:** A zero-byte file passed as the bundle.
 
-**Setup:** `bundle.sig` is a zero-byte file. The model directory and key material are valid.
+**Setup:** Empty path or zero-length bundle file.
 
-**Why it exists:** A zero-byte bundle is a distinct failure mode from corrupted JSON or truncated data — the file exists but contains nothing. This can arise from failed downloads, interrupted writes, or misconfigured pipelines that create empty placeholder files. The client must detect the empty input and return a clear error rather than crash, hang, or report ambiguous results.
+**Why it exists:** Edge-case input should fail fast and clearly, not with undefined behavior.
 
-**Expected outcome:** Exit non-zero. Error must indicate the bundle is empty or unparseable.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** Pipelines that produce empty bundles due to transient errors may silently pass verification, or the client may crash on empty input with no actionable error message.
-
----
+**Impact if it fails:** Unpredictable errors or spurious pass on empty input.
 
 #### `malformed-missing-envelope_fail`
+**Spec:** §8.1
 
-**What it tests:** Rejection of a bundle file that is valid JSON with correct `mediaType` and `verificationMaterial` but is missing the `dsseEnvelope` field entirely.
+**What it tests:** JSON that is valid overall and may include `mediaType` but is missing the required `dsseEnvelope` (or equivalent) field the client needs.
 
-**Setup:** `bundle.sig` contains `{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json","verificationMaterial":{...}}` — structurally valid JSON that resembles a real bundle but has no `dsseEnvelope` key.
+**Setup:** Syntactically valid JSON, structurally wrong for a DSSE-wrapped OMS bundle.
 
-**Why it exists:** This tests a distinct failure mode from corrupted JSON (`corrupted-bundle_fail`) and empty signatures (`no-signature_fail`). The JSON parses successfully and the `mediaType` is correct, but the critical `dsseEnvelope` field — which contains the payload and signatures — is absent. A client that validates `mediaType` and `verificationMaterial` but does not check for `dsseEnvelope` presence could silently fail or crash when attempting to read the missing field.
+**Why it exists:** Field presence must be validated, not only JSON validity and media type.
 
-**Expected outcome:** Exit non-zero. Error must indicate the bundle is missing required fields.
+**Expected outcome:** Non-zero exit.
 
-**Impact if it fails:** Clients may crash with null-pointer errors when accessing the missing envelope, or may silently skip signature verification because there is no signature to check.
-
----
+**Impact if it fails:** Malformed but “almost valid” JSON could be mis-processed.
 
 #### `malformed-wrong-predicate_fail`
+**Spec:** §5.1, §8.3
 
-**What it tests:** Rejection of a bundle where the DSSE payload's `predicateType` is not the OMS predicate URI.
+**What it tests:** The `predicateType` URI inside the in-envelope statement is changed to a wrong value; the DSSE signature is over a specific payload, so the payload is no longer the one that was signed (or the statement no longer matches the expected predicate type).
 
-**Setup:** A structurally valid bundle derived from `key-simple`, where the base64-encoded payload has been decoded, its `predicateType` changed from `https://model_signing/signature/v1.0` to `https://example.com/wrong-predicate/v1.0`, and re-encoded. The DSSE signature no longer matches the modified payload.
+**Setup:** Committed bundle variant with wrong `predicateType` in the signed payload.
 
-**Why it exists:** The OMS spec requires clients to validate the `predicateType` field. A bundle with the correct structure, valid `mediaType`, and valid `verificationMaterial` but a wrong predicate could be a bundle from a different in-toto system entirely. The client must either reject the payload for signature mismatch (because the payload was modified) or reject it for having the wrong predicate type. Either rejection is correct — the test ensures the bundle is not silently accepted.
+**Why it exists:** The predicate type identifies the kind of in-toto statement; the wrong type must invalidate verification.
 
-**Expected outcome:** Exit non-zero. Error may indicate signature mismatch or unsupported predicate type.
+**Expected outcome:** Non-zero exit; signature or payload check must fail.
 
-**Impact if it fails:** Clients may accept bundles from unrelated in-toto systems as valid OMS bundles, leading to incorrect provenance assertions.
-
----
+**Impact if it fails:** Wrong semantic types could be smuggled as if they were OMS model statements.
 
 #### `certificate-expired_fail`
+**Spec:** §4.1, §8.2
 
-**What it tests:** Rejection when the signing certificate embedded in the bundle has expired.
+**What it tests:** A leaf certificate whose **validity period** is in the past (e.g. Jan 1–2, 2020) while the chain and signature are otherwise consistent with a signed bundle.
 
-**Setup:** The bundle was signed with a leaf certificate whose validity period is Jan 1–2, 2020 (already expired). The certificate was issued by the standard intermediate CA (valid chain). The root CA certificate is provided as the trust anchor for verification. The model content and certificate chain are otherwise correct — only the leaf cert's validity period has lapsed.
+**Setup:** Committed or generated cert and bundle using that expired leaf.
 
-**Why it exists:** Certificate expiry handling is a common source of production bugs. Without this test, a client that skips `notBefore`/`notAfter` validation would pass all other certificate tests (which use certs valid for 10 years). This test ensures that temporal validity is enforced — a bundle signed with an expired certificate must be rejected even if the chain and signature are cryptographically valid.
+**Why it exists:** X.509 time validity is mandatory; expired identities must not be treated as current signers.
 
-**Expected outcome:** Exit non-zero. Error must indicate the certificate is expired or not yet valid.
+**Expected outcome:** Non-zero exit; temporal validation must fail.
 
-**Impact if it fails:** **Security failure.** Clients accept bundles signed with certificates that are no longer valid, undermining the time-bounded trust model of PKI. Revoked or decommissioned signing identities would continue to be accepted indefinitely.
-
----
+**Impact if it fails:** **Security failure** — decommissioned or expired credentials could be accepted as valid.
 
 #### `key-verify-as-certificate_fail`
+**Spec:** §4.1
 
-**What it tests:** Rejection when a bundle signed with the key method is verified using the certificate method.
+**What it tests:** A key-signed bundle (verification material includes a `publicKey` or equivalent key method material) is submitted to verification that is run in **certificate** mode, so the `verificationMaterial` type does not match the method the bundle was produced for.
 
-**Setup:** The bundle is the valid `key-simple` bundle (contains `verificationMaterial.publicKey`). The config specifies `method: certificate` with a valid CA cert chain for verification. The bundle has no `x509CertificateChain` in its verification material — only `publicKey`.
+**Setup:** Use `key`-style bundle; invoke verify with certificate chain parameters only (mismatched method).
 
-**Why it exists:** Every other negative test uses the correct method for verification (key tests verify with key, cert tests verify with cert). A client that does not validate the verification material discriminator (`publicKey` vs `x509CertificateChain`) might silently fall through to a default code path and produce unpredictable results. This test ensures the client checks that the bundle's verification material type matches the requested verification method.
+**Why it exists:** Method consistency prevents confusion attacks where a key bundle is “verified” by ignoring key rules or vice versa.
 
-**Expected outcome:** Exit non-zero. Error must indicate a verification material type mismatch, missing certificate chain in the bundle, or similar.
+**Expected outcome:** Non-zero exit; type/method mismatch must be detected.
 
-**Impact if it fails:** **Security failure.** Clients do not enforce method consistency, meaning an attacker could sign with a key (requiring no PKI infrastructure) and have the bundle accepted by a verifier that believes it is enforcing certificate-based provenance with a trusted CA.
-
----
-
-## Category 2: Roundtrip Tests (`test/assets/roundtrip/`)
-
-These tests call `sign-model` followed immediately by `verify-model` within the same test run. They prove the client's signing and verification paths are consistent with each other. The model is copied to a temporary directory before signing so the original assets are not modified.
-
-**Bundle structure validation:** After every successful sign, the produced bundle is validated against the OMS JSON Schemas (via `oms-schemas`). This catches clients that produce bundles with wrong media types, missing predicate fields, incorrect `verificationMaterial` structure, or unsorted resource descriptors — even when the client's own verify command accepts them. Specifically:
-- Outer bundle validated against `bundle.schema.json` (media type, DSSE envelope, verification material)
-- Decoded DSSE payload validated against `statement.schema.json` (in-toto statement, OMS predicate, resources, serialization)
-- Method-specific assertion: `verificationMaterial` contains the correct field for the signing method (`publicKey` for key, `x509CertificateChain` for certificate)
-- Resource descriptors are asserted to be lexicographically sorted by name
+**Impact if it fails:** **Security failure** — the implementation might not enforce that verification method matches bundle contents, weakening authentication semantics.
 
 ---
+
+## Category 2: Roundtrip tests (23)
+
+Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, then verifies it using the test harness, exercising live crypto and I/O.
+
+> **Note:** After every successful `sign`, the produced bundle is validated structurally: OMS JSON Schemas from **oms-schemas** apply to the outer bundle and decoded statement/predicate; the harness asserts resource descriptors are **sorted** by `name` (§6.4), recomputes the **root digest** (§6.5.1), and when the case uses `sig_inside_model`, checks that the signature file is **excluded** from the signed set (§6.2, §9).
 
 #### `key-simple`
+**Spec:** §4.1, §5.2, §6.1–§6.5, §8.1–§8.4
 
-**What it tests:** Basic key sign-then-verify roundtrip on a simple two-file model.
+**What it tests:** A minimal end-to-end **sign** then **verify** for the key method on the `models/simple` fixture, matching the “happy path” for the suite.
 
-**Why it exists:** The minimal end-to-end test for key-based signing. Proves the client can produce a bundle and then successfully verify it. If this fails, no further key roundtrip tests will pass.
+**Setup:** `models/simple` with `signme-1` and `signme-2` in scope; `ignore-me` excluded as configured. Private key and public key in `config.json` per assets.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["signme-1", "signme-2"]`.
+**Why it exists:** If this fails, no other key roundtrip can be trusted; it wires signing, manifest construction, and verification together.
 
-**Impact if it fails:** Key-based signing is fundamentally broken in this client.
+**Expected outcome:** Exit code 0. Bundle lists exactly `["signme-1", "signme-2"]` in sorted order (per `expected_signed_files`).
 
----
+**Impact if it fails:** Key signing and verification is fundamentally broken for the reference layout.
 
 #### `certificate-simple`
+**Spec:** §4.1, §5.2, §8.2
 
-**What it tests:** Certificate sign-then-verify roundtrip using the full 3-level PKI chain.
+**What it tests:** Full PKI **sign** with leaf + intermediate material and **verify** using the root CA as trust anchor, for the same high-level `simple` model as the key case (certificate method).
 
-**Setup:** Signs with `signing-key.pem` + `signing-key-cert.pem` (leaf), providing `int-ca-cert.pem` + `ca-cert.pem` as the certificate chain. Verifies using `ca-cert.pem` as the trust anchor.
+**Setup:** Leaf signing cert and chain from `test/assets/keys/certificate/…`; sign block includes `private_key` / chain as required by the adapter; verify uses `ca-cert.pem` or equivalent as trust.
 
-**Why it exists:** End-to-end test for certificate-based signing. Also validates that the intermediate CA certificate is correctly embedded in or referenced by the bundle and recovered during verification.
+**Why it exists:** Certificate signing is a first-class method; the roundtrip must prove chain handling end to end, not only in verify-only historical bundles.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["signme-1", "signme-2"]`.
+**Expected outcome:** Exit code 0.
 
-**Impact if it fails:** Certificate-based signing is broken. PKI-based model provenance is unavailable.
-
----
+**Impact if it fails:** Certificate-based signing and verification in live workflows is broken.
 
 #### `key-multi-file`
+**Spec:** §6.1, §6.1.2, §6.4
 
-**What it tests:** Key roundtrip on a model with subdirectories.
+**What it tests:** Key signing and verification for a model that includes a subdirectory: `weights.bin`, `config.json`, `subdir/adapter.bin` — relative paths, traversal, and sort order of resources.
 
-**Setup:** Uses `models/multi-file` (`weights.bin`, `config.json`, `subdir/adapter.bin`).
+**Setup:** `models/multi-file` (or equivalent) with nested path.
 
-**Why it exists:** Validates that the signing path correctly traverses subdirectories, produces relative paths as resource names, and sorts them deterministically. The verifier must then match the same traversal.
+**Why it exists:** Nested layouts and canonical ordering are required for deterministic manifests and for real repository shapes.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["config.json", "subdir/adapter.bin", "weights.bin"]`.
+**Expected outcome:** Exit code 0. Expected sorted files: `["config.json", "subdir/adapter.bin", "weights.bin"]`.
 
-**Impact if it fails:** Models with subdirectory structure (most real models) cannot be signed or verified.
-
----
-
-#### `key-ignore-paths`
-
-**What it tests:** Roundtrip with `--ignore-paths` excluding a file during signing.
-
-**Setup:** `models/simple` with `ignore_paths: ["ignore-me"]`. Signs without `ignore-me`; verifies with the same ignore list.
-
-**Why it exists:** The roundtrip path must correctly pass `--ignore-paths` to both the signer and verifier. If ignore paths are passed to sign but not to verify, the verifier will encounter `ignore-me` in the directory and fail with an unsigned-file error.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. `ignore-me` is not in the bundle.
-
-**Impact if it fails:** Operators cannot sign models with auxiliary files (checksums, lock files, etc.) reliably.
-
----
-
-#### `key-ignore-unsigned`
-
-**What it tests:** Roundtrip where verification uses `--ignore-unsigned-files` to tolerate a file added after signing.
-
-**Setup:** Signs `models/simple` (excluding `ignore-me`). After signing, an additional file is injected into the model copy. Verifies with `--ignore-unsigned-files`.
-
-**Why it exists:** Tests the complete lifecycle of a model in a deployment environment where runtime artifacts accumulate after the model is signed. The verifier must accept the added file because `--ignore-unsigned-files` is set.
-
-**Expected outcome:** Sign exits 0. Verify exits 0 even with the extra file present.
-
-**Impact if it fails:** Models cannot be deployed to live environments that generate auxiliary files post-signing.
-
----
-
-#### `key-single-file`
-
-**What it tests:** Key roundtrip for a single-file model.
-
-**Setup:** Uses `models/single-file` which contains only `model.bin`.
-
-**Why it exists:** Validates the single-file code path end-to-end. The signing path for a file (vs. a directory) is structurally different in the canonicalization step.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["model.bin"]`.
-
-**Impact if it fails:** Single-file model artifacts (ONNX, GGUF, SafeTensors, etc.) cannot be signed.
-
----
+**Impact if it fails:** Nested “models with folders” cannot be signed and verified in practice.
 
 #### `certificate-multi-file`
+**Spec:** §4.1, §6.1, §6.1.2
 
-**What it tests:** Certificate roundtrip on a multi-file model with subdirectories.
+**What it tests:** The **certificate** method on the same multi-file / nested model layout as `key-multi-file`, ensuring PKI sign+verify with non-flat trees.
 
-**Why it exists:** Combines the multi-file and certificate scenarios. Ensures the certificate signing path handles non-flat model structures, not just the key-based path.
+**Setup:** `models/multi-file` with certificate sign/verify config.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["config.json", "subdir/adapter.bin", "weights.bin"]`.
+**Why it exists:** Users may standardize on certificates while still using nested file layouts; both dimensions must work together.
 
-**Impact if it fails:** Certificate-signed multi-file models (the most common enterprise scenario) cannot be used.
+**Expected outcome:** Exit code 0.
 
----
-
-#### `key-simple-deterministic`
-
-**What it tests:** That signing the same model twice with the same key produces identical manifests (deterministic output).
-
-**Setup:** Signs `models/simple` twice with the same key and settings. Compares the resource list (names + digests) from both bundles.
-
-**Why it exists:** Non-deterministic signing can cause silent failures in version control workflows where users compare bundles across runs, or in reproducible builds. The manifest must always produce the same hash values and the same sorted resource order for identical inputs.
-
-**Expected outcome:** Both signs exit 0. Both verifies exit 0. The `resources` list (names and digests) in both bundles is identical.
-
-**Impact if it fails:** Signing is non-deterministic — different runs produce different bundles for the same model, breaking bundle comparison, reproducible builds, and any workflow that stores bundles in version control.
-
----
-
-#### `key-empty-file`
-
-**What it tests:** Key roundtrip on a model containing an empty (zero-byte) file.
-
-**Setup:** Uses `models/with-empty-file` containing `signme-1` (8 bytes) and `empty.bin` (0 bytes).
-
-**Why it exists:** Empty files are a valid edge case — some model formats include empty placeholder files. The hashing and manifest generation must handle zero-byte files correctly. SHA-256 of an empty file is `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["empty.bin", "signme-1"]`.
-
-**Impact if it fails:** Models containing empty files (placeholders, markers, etc.) cannot be signed.
-
----
-
-#### `key-p384`
-
-**What it tests:** Key roundtrip using an EC P-384 key instead of the default P-256.
-
-**Setup:** Uses a P-384 (secp384r1) key pair for signing and verification.
-
-**Why it exists:** The spec states P-384 MUST be supported. This test ensures clients correctly handle larger EC keys and the corresponding signature algorithms (ECDSA with SHA-384).
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["signme-1", "signme-2"]`.
-
-**Impact if it fails:** Clients are non-compliant with the spec. Users requiring P-384 (common in government/enterprise security policies) cannot use the client.
-
----
-
-#### `key-p521`
-
-**What it tests:** Key roundtrip using an EC P-521 key.
-
-**Setup:** Uses a P-521 (secp521r1) key pair for signing and verification.
-
-**Why it exists:** The spec states P-521 MUST be supported (Section 8.1). This completes the EC curve coverage alongside P-256 and P-384 tests.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["signme-1", "signme-2"]`.
-
-**Impact if it fails:** Clients are non-compliant with the spec. Users requiring P-521 (required by some government security standards) cannot use the client.
-
----
+**Impact if it fails:** The combination of X.509 signing and multi-file model layouts is broken.
 
 #### `certificate-self-signed`
+**Spec:** §4.1, §8.2
 
-**What it tests:** Certificate roundtrip with a self-signed certificate (no intermediate CA).
+**What it tests:** Signing and verifying with a **self-signed** leaf certificate (the same cert acts as the trust anchor and the end-entity), common in development or air-gapped settings.
 
-**Setup:** Uses a self-signed certificate where the same certificate serves as both the signing cert and the trust anchor.
+**Setup:** `keys/self-signed/…` material; single-cert chain configuration.
 
-**Why it exists:** Self-signed certificates are common in development, testing, and air-gapped environments. The certificate chain handling must work when the chain has only one certificate.
+**Why it exists:** The spec does not only target enterprise PKI; self-signed is explicitly in scope for test and constrained environments.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["signme-1", "signme-2"]`.
+**Expected outcome:** Exit code 0.
 
-**Impact if it fails:** Developers cannot use self-signed certificates for testing. Air-gapped environments requiring simple PKI are unsupported.
+**Impact if it fails:** Developers and air-gapped users cannot sign with a single self-contained cert as intended.
 
----
+#### `key-single-file`
+**Spec:** §6.1.2
 
-#### `key-unicode-filename`
+**What it tests:** Key sign+verify for a “model” that is a single file `model.bin` at the root, exercising basename-only resource naming and a different canonicalization path from multi-file cases.
 
-**What it tests:** Key roundtrip on a model with Unicode characters in filenames.
+**Setup:** `models/single-file`.
 
-**Setup:** Uses `models/unicode-names` containing `weights.bin` and `模型.bin` (Chinese characters meaning "model").
+**Why it exists:** Single-artifact deliverables are common; they must not be special-cased incorrectly.
 
-**Why it exists:** Model files from international teams may have non-ASCII filenames. The path handling, JSON serialization, and filesystem operations must correctly handle UTF-8 encoded filenames.
+**Expected outcome:** Exit code 0. Manifest contains `["model.bin"]`.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["weights.bin", "模型.bin"]`.
+**Impact if it fails:** Single-file models (many ML artifact formats) cannot be roundtripped.
 
-**Impact if it fails:** Models with non-ASCII filenames (common in i18n contexts) cannot be signed or verified, excluding international users.
+#### `key-ignore-paths`
+**Spec:** §6.2, §6.2.1
 
----
+**What it tests:** **Sign** and **verify** with the same user `--ignore-paths` (e.g. `ignore-me`) so the excluded file never enters the signed set but in-scope files do.
+
+**Setup:** `models/simple` (or same layout) with explicit ignore in both sign and verify config.
+
+**Why it exists:** Exclusions must be stable across the roundtrip, not just in verify-only fixtures.
+
+**Expected outcome:** Exit code 0. `ignore-me` is not listed among signed files.
+
+**Impact if it fails:** Roundtrip and verify-only behavior for `ignore-paths` diverge, breaking reproducible signing workflows.
+
+#### `key-ignore-unsigned`
+**Spec:** §8.5
+
+**What it tests:** After a successful sign, a file is **injected** into the model directory; **verify** is run with `--ignore-unsigned-files` so the extra file does not break verification.
+
+**Setup:** Post-sign `inject` (or equivalent) of an extra file; verify block enables ignore-unsigned.
+
+**Why it exists:** Simulates release pipelines where the directory gains files after signing (caches, sidecars) but operators still want a green verify.
+
+**Expected outcome:** Exit code 0 with the extra file present on disk.
+
+**Impact if it fails:** Deployment and lifecycle patterns that rely on lenient post-sign directories cannot be supported.
 
 #### `key-default-ignores`
+**Spec:** §6.2
 
-**What it tests:** That `.git`, `.github`, `.gitignore`, and `.gitattributes` are automatically excluded from signing even WITHOUT explicit `--ignore-paths`.
+**What it tests:** Default git- and tool-related paths (e.g. `.git/HEAD`, `.github/ci.yml`, `.gitignore`, `.gitattributes`) are **automatically** excluded with **no** explicit `--ignore-paths`.
 
-**Setup:** Uses `models/with-git-dir` which contains `model.bin` plus `.git/HEAD`, `.github/ci.yml`, `.gitignore`, and `.gitattributes`. No `ignore_paths` is specified in the config.
+**Setup:** `models/with-git-dir` (or equivalent) with `model.bin` as the only model content that should remain signed.
 
-**Why it exists:** Section 5.1 states implementations "MUST exclude by default: `.git`, `.gitignore`, `.gitattributes`, `.github`". This test verifies the default exclusion behavior works without user intervention.
+**Why it exists:** The spec’s default-exclusion list must work out of the box so repos do not need huge ignore lists for common VCS files.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains only `["model.bin"]` — all git-related files are auto-excluded.
+**Expected outcome:** Exit code 0. Bundle contains only `["model.bin"]` (git-like paths not in the manifest).
 
-**Impact if it fails:** Users must manually specify `--ignore-paths .git .github .gitignore .gitattributes` for every signing operation, which is error-prone and violates the spec's convenience requirement.
-
----
-
-#### `key-special-chars-path`
-
-**What it tests:** Signing and verification of models with spaces and special characters in file/directory names.
-
-**Setup:** Uses `models/special-chars` containing `file (copy).bin`, `normal.bin`, and `path with spaces/model.bin`.
-
-**Why it exists:** Real-world models often have paths with spaces, parentheses, or other special characters. Path handling, shell escaping, and JSON serialization must all handle these correctly.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["file (copy).bin", "normal.bin", "path with spaces/model.bin"]`.
-
-**Impact if it fails:** Models with human-readable filenames (common when files are manually organized) cannot be signed. Users would need to rename files to avoid spaces/special chars.
-
----
+**Impact if it fails:** Users would have to manually specify standard git paths on every sign, increasing errors and merge conflicts.
 
 #### `key-dotfile-included`
+**Spec:** §6.2
 
-**What it tests:** That non-git dotfiles (like `.config`, `.env.example`) ARE signed and not mistakenly excluded.
+**What it tests:** Non-git “dotfiles” at the model root (e.g. `.config`, `.env.example`) **are** included in the signed set along with a normal `model.bin`, i.e. they are not treated like `.git` metadata.
 
-**Setup:** Uses `models/with-dotfiles` containing `.config`, `.env.example`, and `model.bin`.
+**Setup:** `models/with-dotfiles`.
 
-**Why it exists:** Section 5.1 specifies only `.git`, `.gitignore`, `.gitattributes`, `.github` are excluded by default. Other dotfiles MUST be included. This test ensures the exclusion logic doesn't over-match.
+**Why it exists:** Distinguish default VCS-style ignores from legitimate hidden config files, which are often security-sensitive and must be signed.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `[".config", ".env.example", "model.bin"]`.
+**Expected outcome:** Exit code 0. All three paths appear in the bundle’s file list (exact list per case config).
 
-**Impact if it fails:** Legitimate configuration files starting with `.` are silently excluded from signing, potentially leaving critical model configuration unsigned and vulnerable to tampering.
-
----
-
-#### `key-binary-content`
-
-**What it tests:** Signing and verification of models containing true binary data (arbitrary byte sequences including null bytes).
-
-**Setup:** Uses `models/binary-content` containing `weights.bin` (1024 bytes with all values 0x00-0xFF) and `header.bin` (binary with null bytes and PNG-like magic bytes).
-
-**Why it exists:** All other model fixtures use ASCII text content. Real ML models contain binary weight data with arbitrary byte values. This test ensures hashing, base64 encoding, and JSON serialization handle non-text data correctly.
-
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `["header.bin", "weights.bin"]`.
-
-**Impact if it fails:** Real ML models (which are binary) cannot be signed. This would make the entire tool unusable for its primary purpose.
-
----
+**Impact if it fails:** Important configuration files at dot paths could be **silently** excluded, breaking integrity and surprise expectations.
 
 #### `key-files-in-hidden-dir`
+**Spec:** §6.2
 
-**What it tests:** That files inside hidden directories (other than `.git`/`.github`) ARE signed and not excluded.
+**What it tests:** Files under “hidden” directories that are **not** git default ignores — e.g. `.cache/weights.bin`, `.local/share/data.bin` — must be **included** in the signed manifest with stable relative names.
 
-**Setup:** Uses `models/hidden-subdir` containing `model.bin`, `.cache/weights.bin`, and `.local/share/data.bin`.
+**Setup:** `models/hidden-subdir` (or equivalent layout).
 
-**Why it exists:** Section 5.1 specifies only `.git`, `.github`, `.gitignore`, `.gitattributes` are excluded by default. Other hidden directories like `.cache/` or `.local/` MUST have their contents signed. This test ensures the exclusion logic is specific to git-related paths, not all dotfiles/dotdirs.
+**Why it exists:** “Hidden” directory names are not a blanket excuse to drop user model content; only the spec’s default-exclude set applies to auto-exclusion.
 
-**Expected outcome:** Sign exits 0. Verify exits 0. Bundle contains `[".cache/weights.bin", ".local/share/data.bin", "model.bin"]`.
+**Expected outcome:** Exit code 0. All model files in those paths appear in the bundle.
 
-**Impact if it fails:** Files in hidden directories are silently excluded, leaving cached model data or local configurations unsigned and vulnerable to tampering.
+**Impact if it fails:** Content under common hidden app dirs could be silently omitted from the manifest (integrity gap).
+
+#### `key-empty-file`
+**Spec:** §6.3.1
+
+**What it tests:** A zero-byte file `empty.bin` is hashed and included in the manifest alongside a non-empty `signme-1` (or similar); the known SHA-256 of the empty file (`e3b0c44…` / standard empty string hash) is used correctly.
+
+**Setup:** `models/with-empty-file`.
+
+**Why it exists:** Edge cases in hashing and file iteration must be correct; empty files occur in real layouts.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Hashing of empty or sparse models could be wrong, breaking manifest equality with other signers.
+
+#### `key-binary-content`
+**Spec:** §6.3.1
+
+**What it tests:** A model with true **binary** payloads — bytes across the range `0x00`–`0xFF`, nulls, and binary magic (e.g. PNG header) — to ensure no text, newline, or encoding assumptions in hashing or I/O.
+
+**Setup:** `models/binary-content` with `header.bin` / `weights.bin` (or as defined in assets).
+
+**Why it exists:** Model files are not UTF-8 text; the serializer must be byte-accurate.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Non-text or mixed binary models may produce wrong digests on some platforms or tools.
+
+#### `key-unicode-filename`
+**Spec:** §6.1.2
+
+**What it tests:** UTF-8 file names in the model tree (e.g. `模型.bin` with Chinese characters) are preserved in the manifest and matched on disk in a case- and encoding-correct way.
+
+**Setup:** `models/unicode-names` with `weights.bin` and `模型.bin` (or asset-defined list).
+
+**Why it exists:** International models and non-ASCII paths are in scope for OMS; path encoding bugs are common if untested.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** Real-world non-English filenames may fail sign or verify spuriously.
+
+#### `key-special-chars-path`
+**Spec:** §6.1.2
+
+**What it tests:** File names and paths with **spaces**, **parentheses** (e.g. `file (copy).bin`), and nested `path with spaces/model.bin` — shell and JSON edge cases for how paths are written and read.
+
+**Setup:** `models/special-chars` per fixture table.
+
+**Why it exists:** User filesystems and export tools produce such names; the signer and CLI must not corrupt them on roundtrip.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** A class of “messy but valid” paths would break the signing or verification workflow.
+
+#### `key-p384`
+**Spec:** §4.2
+
+**What it tests:** End-to-end sign and verify using an **EC P-384** key pair, as required to be available in conforming clients.
+
+**Setup:** `keys/p384/…` key material; same logical model as the standard key cases where applicable.
+
+**Why it exists:** The spec **mandates** P-384 support; this is a direct algorithm conformance check.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** The implementation is **non-compliant** and blocks P-384 users and policies.
+
+#### `key-p521`
+**Spec:** §4.2
+
+**What it tests:** End-to-end sign and verify using an **EC P-521** key pair, as required to be available in conforming clients.
+
+**Setup:** `keys/p521/…` key material.
+
+**Why it exists:** The spec **mandates** P-521 support, often required in government or high-assurance settings.
+
+**Expected outcome:** Exit code 0.
+
+**Impact if it fails:** The implementation is **non-compliant**; high-assurance or regulated environments cannot be met.
+
+#### `key-simple-deterministic`
+**Spec:** §6.4, §6.5.1
+
+**What it tests:** Running **sign twice** on the same model and keys yields **identical** resource `name` ordering and per-file **digests** (and thus stable root material), with no time- or run-dependent fields leaking into the hashed predicate for files.
+
+**Setup:** Two sign passes in the same case or repeated invocation as defined by the harness; same inputs.
+
+**Why it exists:** Reproducible builds, CI caching, and diffing manifests require deterministic outputs.
+
+**Expected outcome:** Exit code 0; resource names and digests match between runs.
+
+**Impact if it fails:** **Non-deterministic signing** breaks reproducible releases and complicates cross-signer interop and auditing.
+
+#### `key-sig-inside-model`
+**Spec:** §6.2, §9
+
+**What it tests:** When the **bundle** file (e.g. `bundle.sig`) is placed **inside** the model directory, the signing implementation must **auto-exclude** that path from the file manifest so the signature does not hash itself (no circular dependency / self-inclusion).
+
+**Setup:** `sig_inside_model: true` in config; bundle path not counted as a normal model resource.
+
+**Why it exists:** The spec says the output bundle must be out of the signed path or explicitly handled; in-repo bundle placement is a real layout.
+
+**Expected outcome:** Exit code 0. `bundle.sig` (or configured name) is **not** in the resources / expected signed file list.
+
+**Impact if it fails:** The **signature would be part of** its own manifest, voiding the intended model digest semantics.
+
+#### `key-empty-model-rejected`
+**Spec:** §6.1
+
+**What it tests:** If the model directory, after all **default** exclusions, contains **no** signable files (e.g. only `.gitignore` in `models/empty` which is auto-excluded), the **signer** must **reject** the operation: a model with zero resources is invalid.
+
+**Setup:** `models/empty` (or equivalent) where only default-excluded content remains; expect failure per spec.
+
+**Why it exists:** The spec requires at least one file after enumeration and exclusions; signing “nothing” is a logic error and could produce useless or ambiguous bundles.
+
+**Expected outcome:** Marked **xfail** for the current Python client — the client may incorrectly **sign** an empty “model” (spec violation). When fixed, the harness should expect non-zero / failure from sign.
+
+**Impact if it fails:** Until the xfail is cleared, the Python client is **out of spec**; users might publish meaningless signed bundles for empty trees.
+
+#### `key-symlink-default-rejected`
+**Spec:** §6.1.1
+
+**What it tests:** A model copy is modified to include an **internal symlink** (e.g. via `model_modifications.symlinks`); with default `allow_symlinks=false`, the **signer** must **reject** the model (not follow the symlink as if it were a file).
+
+**Setup:** Symlink created inside the model; default symlink policy (reject).
+
+**Why it exists:** Symlinks complicate the threat model and path semantics; the default must be the secure, explicit “no symlinks” behavior unless opted in (if the spec allows opt-in).
+
+**Expected outcome:** **xfail** — the Python client may **follow** symlinks instead of rejecting, conflicting with the spec. Intended outcome once conformant: sign fails (non-zero).
+
+**Impact if it fails:** Conformance to symlink rules is not met; signers that follow links may include unintended or attacker-controlled path targets.
+
+#### `key-symlink-outside-root`
+**Spec:** §6.1.1
+
+**What it tests:** A symlink under the model points **outside** the model root (e.g. to `/tmp/nonexistent-target` or similar); the signer must **error**, not read arbitrary filesystem locations through the link.
+
+**Setup:** `model_modifications` adds an out-of-root symlink; default or explicit `allow_symlinks` as the case requires.
+
+**Why it exists:** Out-of-tree symlinks are a classic exfiltration or confusion vector; the spec requires a hard error.
+
+**Expected outcome:** **xfail** for the Python client — it may **silently follow** or mis-handle. Intended: non-zero, clear error when signing.
+
+**Impact if it fails:** Security and clarity: the signing scope could include files outside the intended model directory.
+
+#### `key-symlink-cycle`
+**Spec:** §6.1.1
+
+**What it tests:** A **directory symlink** that creates a **cycle** (e.g. points to `.` in a way that loops); the walk must **detect** the cycle and **error** rather than infinite-loop or skip silently in an unsafe way.
+
+**Setup:** `model_modifications` introduces a cycle (as defined in the test harness).
+
+**Why it exists:** Cycles in symlink layouts must be detected; silent skip can hide parts of the tree or make behavior implementation-defined.
+
+**Expected outcome:** **xfail** — the Python client may **silently skip** cycles. Intended: sign fails with a clear cycle detection error.
+
+**Impact if it fails:** Unpredictable manifest contents or non-spec behavior when user models contain symlink cycles.
 
 ---
 
-## Config Schema
+## Bundle validation (roundtrip)
 
-All test cases use a unified `config.json` schema with nested `sign` and `verify` blocks:
+After each successful `sign`, the harness (via `test/test_roundtrip.py` and `oms-schemas`) checks:
+
+- **JSON Schema** for the outer bundle and the statement/predicate (§8.1, §8.3).
+- **Resource descriptor order** — lexicographic by `name` (§6.4).
+- **Root digest** — recomputed from per-file digests (§6.5.1).
+- **Signature file exclusion** when `sig_inside_model` is set — bundle path not in signed set (§6.2, §9).
+
+---
+
+## Not covered
+
+| Spec | Gap | Why |
+|---|---|---|
+| §6.3.2 | `file-shard-N` sharding | Adapter CLI does not expose `--serialization` flag; needs protocol extension. |
+| §7 | BLAKE2b / BLAKE3 | Optional algorithms; adapter CLI does not expose `--hash-algorithm` flag. |
+
+---
+
+## Config schema (`config.json`)
+
+All cases share one shape. Roundtrip cases add a `sign` block; negative verify cases may set `model_modifications`.
+
+| Field | Required | Default | Notes |
+|---|---|---|---|
+| `description` | yes | — | Human-readable one-line purpose. |
+| `method` | yes | — | `key`, `certificate`, or `sigstore` (as used by the adapter). |
+| `model` | yes | — | Path to fixture, usually under `test/assets/`. |
+| `model_relative_to` | no | `assets` | `assets` or `test_dir` (historical bundles colocated with model). |
+| `expect` | no | `pass` | `pass` or `fail` (e.g. empty-model rejection). |
+| `sig_inside_model` | no | `false` | If true, place `bundle.sig` inside the model copy for the test. |
+| `sign` | roundtrip | — | `private_key`, `signing_cert`, `cert_chain` as needed. |
+| `verify` | when verifying | — | `public_key`, `cert_chain`, `ignore_paths`, `ignore_unsigned_files`. |
+| `expected_signed_files` | no | — | Exact sorted manifest file list to assert. |
+| `model_modifications` | no | — | `tamper` / `delete` / `inject` / `symlinks` for pre-sign or pre-verify model changes. |
+
+Example (abbreviated):
 
 ```json
 {
-  "description": "What this test validates",
-  "method": "key|certificate|sigstore",
+  "description": "…",
+  "method": "key",
   "model": "models/simple",
-
-  "sign": {
-    "private_key": "keys/.../signing-key.pem",
-    "signing_cert": "keys/.../signing-cert.pem",
-    "cert_chain": ["keys/.../int-ca-cert.pem"]
-  },
-
+  "model_relative_to": "assets",
+  "expect": "pass",
+  "sig_inside_model": false,
+  "sign": { "private_key": "keys/…/signing-key.pem" },
   "verify": {
-    "public_key": "keys/.../signing-key-pub.pem",
-    "cert_chain": ["keys/.../ca-cert.pem"],
+    "public_key": "keys/…/signing-key-pub.pem",
     "ignore_paths": ["ignore-me"],
     "ignore_unsigned_files": false
   },
-
-  "expected_signed_files": ["file1", "file2"],
-  "model_modifications": { "tamper": {}, "delete": [], "inject": {} }
+  "expected_signed_files": ["signme-1", "signme-2"],
+  "model_modifications": { "tamper": {}, "delete": [], "inject": {}, "symlinks": {} }
 }
 ```
 
-**Key points:**
-- `sign` block: Only for roundtrip tests (signing parameters)
-- `verify` block: Required for all tests (verification parameters)
-- For certificate method: `sign.cert_chain` = intermediate CA(s), `verify.cert_chain` = root CA (trust anchor)
-- `model_modifications`: Only for verify negative tests (tamper/delete/inject files at runtime)
-
 ---
 
-## Test Count Summary
+## Test count summary
 
 | Category | Count |
 |---|---|
 | Verify — positive | 8 |
-| Verify — negative (failure detection) | 14 |
-| Verify — historical regression | 10 |
-| Roundtrip | 18 |
-| **Total** | **50** |
+| Verify — negative | 14 |
+| Verify — historical | 10 |
+| Roundtrip | 23 |
+| **Total** | **55** |
 
----
-
-## Model Fixtures (`test/assets/models/`)
-
-| Fixture | Files | Used by |
-|---|---|---|
-| `models/simple` | `signme-1` (9 bytes), `signme-2` (8 bytes), `ignore-me` (excluded) | Most key and certificate tests |
-| `models/multi-file` | `weights.bin`, `config.json`, `subdir/adapter.bin` | Multi-file and nested tests |
-| `models/single-file` | `model.bin` | Single-file tests |
-| `models/with-empty-file` | `signme-1` (8 bytes), `empty.bin` (0 bytes) | Empty file edge case test |
-| `models/unicode-names` | `weights.bin`, `模型.bin` | Unicode filename test |
-| `models/with-git-dir` | `model.bin`, `.git/HEAD`, `.github/ci.yml`, `.gitignore`, `.gitattributes` | Default ignores test |
-| `models/special-chars` | `file (copy).bin`, `normal.bin`, `path with spaces/model.bin` | Special characters path test |
-| `models/with-dotfiles` | `.config`, `.env.example`, `model.bin` | Dotfile inclusion test |
-| `models/binary-content` | `weights.bin` (1024 bytes, 0x00-0xFF), `header.bin` (binary with nulls) | Binary data test |
-| `models/hidden-subdir` | `model.bin`, `.cache/weights.bin`, `.local/share/data.bin` | Hidden directory inclusion test |
-
-## Key Material (`test/assets/keys/`)
-
-| Path | Purpose |
-|---|---|
-| `keys/certificate/signing-key.pem` | Private key for signing (EC P-256) |
-| `keys/certificate/signing-key-pub.pem` | Public key for key-method verification |
-| `keys/certificate/signing-key-cert.pem` | Leaf certificate for certificate-method signing |
-| `keys/certificate/int-ca-cert.pem` | Intermediate CA certificate |
-| `keys/certificate/int-ca-priv.pem` | Intermediate CA private key — used by `gen.sh` and expired cert generation |
-| `keys/certificate/ca-cert.pem` | Root CA certificate (trust anchor for verification) |
-| `keys/certificate/ca-priv.pem` | Root CA private key — used by `gen.sh` to issue intermediate CA |
-| `keys/p384/signing-key.pem` | EC P-384 private key — used in P-384 roundtrip test |
-| `keys/p384/signing-key-pub.pem` | EC P-384 public key |
-| `keys/p521/signing-key.pem` | EC P-521 private key — used in P-521 roundtrip test |
-| `keys/p521/signing-key-pub.pem` | EC P-521 public key |
-| `keys/self-signed/signing-key.pem` | Private key for self-signed certificate test |
-| `keys/self-signed/signing-key-pub.pem` | Public key for self-signed certificate test |
-| `keys/self-signed/signing-cert.pem` | Self-signed certificate (EC P-256) |
-| `keys/wrong/wrong-key.pem` | Unrelated private key — used to generate `wrong-key-pub.pem` |
-| `keys/wrong/wrong-key-pub.pem` | Unrelated public key — used in wrong-key failure test |
-| `keys/wrong/wrong-ca-cert.pem` | Unrelated CA certificate — used in wrong-CA failure test |
-| `keys/expired/signing-key.pem` | EC P-384 private key — used to sign the expired cert bundle |
-| `keys/expired/signing-key-cert.pem` | Leaf certificate expired 2020-01-02, signed by intermediate CA — used in expired cert failure test |
