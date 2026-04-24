@@ -1,0 +1,11 @@
+{
+  "description": "FAIL: Sigstore-signed bundle must be rejected when verified with key method (§4.1 — verification material type mismatch)",
+  "method": "key",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "expect": "fail",
+  "verify": {
+    "public_key": "keys/ec-p256/signing-key-pub.pem",
+    "ignore_paths": ["ignore-me"]
+  }
+}

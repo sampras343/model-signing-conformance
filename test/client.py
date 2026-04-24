@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,22 @@ from typing import Literal, Optional
 
 _VALID_EXPECT = ("pass", "fail")
 _VALID_RELATIVE_TO = ("assets", "test_dir")
+
+
+def _read_identity_token(env_name: str) -> str:
+    """Read an OIDC identity token.
+
+    Checks two sources in order:
+    1. Direct value from env var ``env_name`` (e.g. SIGSTORE_ID_TOKEN).
+    2. File path from ``{env_name}_FILE`` (e.g. SIGSTORE_ID_TOKEN_FILE).
+    """
+    direct = os.environ.get(env_name, "")
+    if direct:
+        return direct
+    file_path = os.environ.get(f"{env_name}_FILE", "")
+    if file_path and Path(file_path).is_file():
+        return Path(file_path).read_text().strip()
+    return ""
 
 
 class ConfigError(Exception):
@@ -55,6 +72,8 @@ class SignBlock:
     private_key: Optional[str] = None
     signing_cert: Optional[str] = None
     cert_chain: list[str] = field(default_factory=list)
+    identity_token_env: Optional[str] = None
+    use_staging: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "SignBlock":
@@ -62,6 +81,8 @@ class SignBlock:
             private_key=data.get("private_key"),
             signing_cert=data.get("signing_cert"),
             cert_chain=data.get("cert_chain", []),
+            identity_token_env=data.get("identity_token_env"),
+            use_staging=data.get("use_staging", False),
         )
 
 
@@ -72,6 +93,9 @@ class VerifyBlock:
     cert_chain: list[str] = field(default_factory=list)
     ignore_paths: list[str] = field(default_factory=list)
     ignore_unsigned_files: bool = False
+    identity: Optional[str] = None
+    identity_provider: Optional[str] = None
+    use_staging: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "VerifyBlock":
@@ -80,6 +104,9 @@ class VerifyBlock:
             cert_chain=data.get("cert_chain", []),
             ignore_paths=data.get("ignore_paths", []),
             ignore_unsigned_files=data.get("ignore_unsigned_files", False),
+            identity=data.get("identity"),
+            identity_provider=data.get("identity_provider"),
+            use_staging=data.get("use_staging", False),
         )
 
 
@@ -92,6 +119,7 @@ class CaseConfig:
     model_relative_to: Literal["assets", "test_dir"] = "assets"
     expect: Literal["pass", "fail"] = "pass"
     sig_inside_model: bool = False
+    requires_ci: bool = False
     sign: Optional[SignBlock] = None
     verify: Optional[VerifyBlock] = None
     expected_signed_files: Optional[list[str]] = None
@@ -121,6 +149,7 @@ class CaseConfig:
             model_relative_to=data.get("model_relative_to", "assets"),
             expect=data.get("expect", "pass"),
             sig_inside_model=data.get("sig_inside_model", False),
+            requires_ci=data.get("requires_ci", False),
             sign=sign_block,
             verify=verify_block,
             expected_signed_files=data.get("expected_signed_files"),
@@ -173,7 +202,6 @@ class ModelSigningClient:
             "--output-bundle", str(output_bundle),
         ]
 
-        # Get signing parameters from nested sign block
         sign_block = cfg.sign
         if sign_block:
             if sign_block.private_key:
@@ -182,8 +210,13 @@ class ModelSigningClient:
                 args += ["--signing-cert", str(assets_root / sign_block.signing_cert)]
             for cert in sign_block.cert_chain:
                 args += ["--cert-chain", str(assets_root / cert)]
+            if sign_block.identity_token_env:
+                token = _read_identity_token(sign_block.identity_token_env)
+                if token:
+                    args += ["--identity-token", token]
+            if sign_block.use_staging:
+                args += ["--use-staging"]
 
-        # Get ignore_paths from verify block (applies to both sign and verify)
         verify_block = cfg.verify
         if verify_block:
             for p in verify_block.ignore_paths:
@@ -222,7 +255,6 @@ class ModelSigningClient:
             "--bundle", str(bundle),
         ]
 
-        # Get verification parameters from nested verify block
         verify_block = cfg.verify
         if verify_block:
             if verify_block.public_key:
@@ -230,7 +262,16 @@ class ModelSigningClient:
             for cert in verify_block.cert_chain:
                 args += ["--cert-chain", str(keys_root / cert)]
 
-            # Resolve ignore paths to absolute paths
+            if verify_block.identity:
+                identity = verify_block.identity
+                if identity.startswith("${") and identity.endswith("}"):
+                    identity = os.environ.get(identity[2:-1], identity)
+                args += ["--identity", identity]
+            if verify_block.identity_provider:
+                args += ["--identity-provider", verify_block.identity_provider]
+            if verify_block.use_staging:
+                args += ["--use-staging"]
+
             effective_ignore = ignore_paths_abs if ignore_paths_abs is not None else []
             if not effective_ignore and verify_block.ignore_paths:
                 model_dir = model_path if model_path.is_dir() else model_path.parent

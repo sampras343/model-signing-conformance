@@ -1,0 +1,13 @@
+{
+  "description": "FAIL: Sigstore verification must reject when OIDC issuer does not match (§4.1, §8.2)",
+  "method": "sigstore",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "expect": "fail",
+  "requires_ci": true,
+  "verify": {
+    "identity": "https://github.com/sigstore/sigstore-python/.github/workflows/release.yml@refs/heads/main",
+    "identity_provider": "https://wrong-issuer.example.com",
+    "ignore_paths": ["ignore-me"]
+  }
+}

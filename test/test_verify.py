@@ -15,22 +15,20 @@ config fields resolved against that root.
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-from .client import ModelSigningClient, CaseConfig
+from .client import ModelSigningClient, CaseConfig, _read_identity_token
 from .schema_validator import validate_bundle
 
+
+def _sigstore_token_available() -> bool:
+    return bool(_read_identity_token("SIGSTORE_ID_TOKEN"))
+
 ASSETS = Path(__file__).parent / "assets"
-
-
-def _load_xfail_reason(case_dir: Path) -> str | None:
-    f = case_dir / "xfail_reason.txt"
-    if f.exists():
-        return f.read_text().strip()
-    return None
 
 
 def _resolve_model(
@@ -59,12 +57,11 @@ def _resolve_model(
     return model_copy
 
 
-def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) -> None:
+def test_verify(
+    client: ModelSigningClient, verify_dir: Path, tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
     """Verify a pre-committed bundle."""
-    xfail_reason = _load_xfail_reason(verify_dir)
-    if xfail_reason:
-        pytest.xfail(xfail_reason)
-
     config_path = verify_dir / "config.json"
     if not config_path.exists():
         pytest.fail(f"Missing config.json in {verify_dir}")
@@ -72,6 +69,11 @@ def test_verify(client: ModelSigningClient, verify_dir: Path, tmp_path: Path) ->
 
     expected_fail = cfg.expect == "fail"
     label = f"{verify_dir.name}: {cfg.description}"
+
+    if cfg.method == "sigstore" and request.config.getoption("--skip-sigstore"):
+        pytest.skip(f"[{label}] skipped (--skip-sigstore)")
+    if cfg.requires_ci and not _sigstore_token_available():
+        pytest.skip(f"[{label}] requires OIDC token (set SIGSTORE_ID_TOKEN or SIGSTORE_ID_TOKEN_FILE)")
 
     bundle = verify_dir / "bundle.sig"
     if not bundle.exists():

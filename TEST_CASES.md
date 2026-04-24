@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**55 tests** total: **23 roundtrip** (live sign, then verify) and **32 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in [`SPEC.md`](SPEC.md); section references below use the same numbering as that spec.
+**67 tests** total: **28 roundtrip** (live sign, then verify) and **39 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in [`SPEC.md`](SPEC.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -12,7 +12,9 @@
 |---|---|---|---|
 | §4.1 | key method — publicKey in verificationMaterial | All key roundtrip + verify tests | Covered |
 | §4.1 | certificate method — x509CertificateChain | certificate-simple, certificate-multi-file, etc. | Covered |
-| §4.1 | sigstore method — certificate + tlogEntries | historical-v1.1.0-sigstore | Covered (xfail) |
+| §4.1 | sigstore method — certificate + tlogEntries | sigstore-simple, sigstore-multi-file, historical-v0.3.1/v1.0.0/v1.0.1/v1.1.0-sigstore | Covered (CI-only) |
+| §4.1 | sigstore wrong identity rejection | sigstore-wrong-identity_fail | Covered (CI-only) |
+| §4.1 | sigstore wrong issuer rejection | sigstore-wrong-issuer_fail | Covered (CI-only) |
 | §4.1 | Accept hint or rawBytes in publicKey | historical-v0.3.1/v1.0.0 (rawBytes) vs v1.1.0 (hint) | Covered |
 | §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
 | §4.1 | Certificate validity period enforced | certificate-expired_fail | Covered |
@@ -26,10 +28,10 @@
 | §5.2.1 | Only regular files, no directory entries | Implicit in all tests | Covered |
 | §5.2.2 | serialization required fields | Schema validation | Covered |
 | §6.1 | Recursive file enumeration | key-multi-file | Covered |
-| §6.1 | Model MUST have ≥1 file after exclusions | key-empty-model-rejected | Covered (xfail) |
-| §6.1.1 | Symlink rejected by default (allow_symlinks=false) | key-symlink-default-rejected | Covered (xfail) |
-| §6.1.1 | Out-of-root symlink MUST error | key-symlink-outside-root | Covered (xfail) |
-| §6.1.1 | Symlink cycle MUST error | key-symlink-cycle | Covered (xfail) |
+| §6.1 | Model MUST have ≥1 file after exclusions | key-empty-model-rejected | Covered |
+| §6.1.1 | Symlink rejected by default (allow_symlinks=false) | key-symlink-default-rejected | Covered |
+| §6.1.1 | Out-of-root symlink MUST error | key-symlink-outside-root | Covered |
+| §6.1.1 | Symlink cycle MUST error | key-symlink-cycle | Covered |
 | §6.1.2 | Forward slash path separator | All multi-file tests | Covered |
 | §6.1.2 | Paths relative to model root | key-multi-file (subdir/adapter.bin) | Covered |
 | §6.1.2 | Single-file basename only | key-single-file | Covered |
@@ -176,7 +178,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Cross-language certificate interoperability is broken.
 
-### Historical cases (10)
+### Historical cases (13)
 
 > **Note:** Historical bundles may not match every detail of the current OMS JSON Schema. Known differences include: `tlogEntries` may be optional for key/certificate material in older bundles, `keyid` may be null in bundles produced before v1.1.0, and v0.2.0 uses a deprecated `predicateType`. The suite still requires these to verify when marked pass.
 
@@ -297,20 +299,59 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** v1.1.0 certificate bundles would be unverifiable for typical deployments.
 
+#### `historical-v0.3.1-sigstore`
+**Spec:** §4.1, §11
+
+**What it tests:** A Sigstore (keyless) bundle from Go v0.3.1 (first sigstore release). Verifies with identity `stefanb@us.ibm.com` and issuer `https://sigstore.verify.ibm.com/oauth2`.
+
+**Setup:** Committed sigstore bundle with model. Requires CI (Sigstore infrastructure). Skipped locally.
+
+**Why it exists:** Earliest sigstore-signed bundle in the Go client. Ensures backwards compatibility with keyless signing from the first release.
+
+**Expected outcome:** Verification succeeds (exit 0). Skipped locally.
+
+**Impact if it fails:** Keyless bundles from Go v0.3.1 are unverifiable.
+
+#### `historical-v1.0.0-sigstore`
+**Spec:** §4.1, §11
+
+**What it tests:** A Sigstore bundle from Go v1.0.0 (first stable release). Same identity and issuer as v0.3.1.
+
+**Setup:** Committed sigstore bundle. Requires CI. Skipped locally.
+
+**Why it exists:** Validates that the stable sigstore bundle format is backwards compatible.
+
+**Expected outcome:** Verification succeeds. Skipped locally.
+
+**Impact if it fails:** Sigstore bundles from Go v1.0.0 are unverifiable.
+
+#### `historical-v1.0.1-sigstore`
+**Spec:** §4.1, §11
+
+**What it tests:** A Sigstore bundle from Go v1.0.1 with `ignore_paths` in the predicate. Introduced `ignore-me` file in the model.
+
+**Setup:** Committed sigstore bundle. Requires CI. Skipped locally. Verify config includes `ignore_paths: ["ignore-me"]`.
+
+**Why it exists:** First sigstore bundle that includes `ignore_paths` in the predicate, testing both sigstore verify and path exclusion handling together.
+
+**Expected outcome:** Verification succeeds. Skipped locally.
+
+**Impact if it fails:** Sigstore bundles with ignore_paths from Go v1.0.1 are unverifiable.
+
 #### `historical-v1.1.0-sigstore`
 **Spec:** §4.1, §11
 
-**What it tests:** A Sigstore (keyless) bundle from Python v1.1.0 using Fulcio, Rekor, and RFC 3161 timestamping, exercising the “certificate + transparency” method end to end in verify-only mode.
+**What it tests:** A Sigstore bundle from Go v1.1.0 with `ignore_paths` in the predicate. Latest sigstore historical vector.
 
-**Setup:** Committed sigstore-style bundle; verification typically requires online OIDC/Sigstore and Rekor infrastructure.
+**Setup:** Committed sigstore bundle. Requires CI. Skipped locally.
 
-**Why it exists:** Real keyless signings exist in the wild; the spec calls out this method, and the suite records expected behavior for environments that can reach the services.
+**Why it exists:** Latest Go client sigstore release. Validates ongoing backwards compatibility for keyless signing.
 
-**Expected outcome:** Marked **xfail** in offline CI — full verification is not available without OIDC/Sigstore infrastructure.
+**Expected outcome:** Verification succeeds. Skipped locally.
 
-**Impact if it fails:** When the test is expected to run in a connected environment, keyless interop is broken; as an xfail, it documents a known harness/environment gap rather than a green conformance bar.
+**Impact if it fails:** Latest sigstore bundles from Go v1.1.0 are unverifiable.
 
-### Negative cases (14)
+### Negative cases (18)
 
 #### `key-simple-tampered-content_fail`
 **Spec:** §8.4
@@ -494,11 +535,63 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** **Security failure** — the implementation might not enforce that verification method matches bundle contents, weakening authentication semantics.
 
+#### `sigstore-wrong-identity_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** A valid sigstore-signed bundle is verified with a **wrong certificate identity** (SAN). The Fulcio certificate was issued to a different workflow than the one the verifier expects.
+
+**Setup:** Pre-committed sigstore bundle; verify config specifies a non-matching identity. Requires CI (Sigstore infrastructure).
+
+**Why it exists:** Sigstore keyless verification relies on identity matching. Accepting a mismatched identity means any signer could produce accepted bundles.
+
+**Expected outcome:** Non-zero exit; identity mismatch detected. Skipped locally.
+
+**Impact if it fails:** **Security failure.** Bundles from untrusted signers accepted as trusted.
+
+#### `sigstore-wrong-issuer_fail`
+**Spec:** §4.1, §8.2
+
+**What it tests:** A valid sigstore-signed bundle is verified with the **wrong OIDC issuer** URL.
+
+**Setup:** Pre-committed sigstore bundle; verify config specifies a wrong `identity_provider`. Requires CI.
+
+**Why it exists:** The OIDC issuer is the trust anchor for keyless signing. A wrong issuer means the verifier is not validating the token's origin.
+
+**Expected outcome:** Non-zero exit; issuer mismatch detected. Skipped locally.
+
+**Impact if it fails:** **Security failure.** Certificates from untrusted identity providers silently accepted.
+
+#### `sigstore-verify-as-key_fail`
+**Spec:** §4.1
+
+**What it tests:** A sigstore-signed bundle (verificationMaterial contains a Fulcio certificate) is verified with `key` method and a public key. The verification material type does not match.
+
+**Setup:** Pre-committed sigstore bundle; verify config uses method `key` with an EC public key.
+
+**Why it exists:** Method mismatch is the inverse of `key-verify-as-certificate_fail`. A sigstore bundle must not be accepted by key-based verification.
+
+**Expected outcome:** Non-zero exit; method mismatch detected.
+
+**Impact if it fails:** **Security failure.** A sigstore bundle could be "verified" by ignoring the Fulcio certificate chain entirely.
+
+#### `sigstore-tampered-content_fail`
+**Spec:** §7, §8.4
+
+**What it tests:** A valid sigstore-signed bundle is verified against a **tampered** model (file content changed after signing). The root digest must not match.
+
+**Setup:** Pre-committed sigstore bundle with `model_modifications.tamper` applied to `signme-1`. Requires CI (Sigstore infrastructure). Skipped locally.
+
+**Why it exists:** Validates that tamper detection works with the sigstore method, not just key/certificate methods.
+
+**Expected outcome:** Non-zero exit; digest mismatch detected. Skipped locally.
+
+**Impact if it fails:** **Integrity failure.** Sigstore-signed bundles do not detect content tampering.
+
 ---
 
-## Category 2: Roundtrip tests (23)
+## Category 2: Roundtrip tests (28)
 
-Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, then verifies it using the test harness, exercising live crypto and I/O.
+Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then verifies it using the test harness, exercising live crypto and I/O.
 
 > **Note:** After every successful `sign`, the produced bundle is validated structurally: OMS JSON Schemas from **oms-schemas** apply to the outer bundle and decoded statement/predicate; the harness asserts resource descriptors are **sorted** by `name` (§6.4), recomputes the **root digest** (§6.5.1), and when the case uses `sig_inside_model`, checks that the signature file is **excluded** from the signed set (§6.2, §9).
 
@@ -758,9 +851,9 @@ Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, t
 
 **Why it exists:** The spec requires at least one file after enumeration and exclusions; signing “nothing” is a logic error and could produce useless or ambiguous bundles.
 
-**Expected outcome:** Marked **xfail** for the current Python client — the client may incorrectly **sign** an empty “model” (spec violation). When fixed, the harness should expect non-zero / failure from sign.
+**Expected outcome:** Signing must fail (non-zero exit). If the client signs an empty model, the test fails — the client is out of spec.
 
-**Impact if it fails:** Until the xfail is cleared, the Python client is **out of spec**; users might publish meaningless signed bundles for empty trees.
+**Impact if it fails:** The client is out of spec; users could publish meaningless signed bundles for empty trees.
 
 #### `key-symlink-default-rejected`
 **Spec:** §6.1.1
@@ -771,7 +864,7 @@ Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, t
 
 **Why it exists:** Symlinks complicate the threat model and path semantics; the default must be the secure, explicit “no symlinks” behavior unless opted in (if the spec allows opt-in).
 
-**Expected outcome:** **xfail** — the Python client may **follow** symlinks instead of rejecting, conflicting with the spec. Intended outcome once conformant: sign fails (non-zero).
+**Expected outcome:** Signing must fail (non-zero exit). If the client follows symlinks instead of rejecting, the test fails.
 
 **Impact if it fails:** Conformance to symlink rules is not met; signers that follow links may include unintended or attacker-controlled path targets.
 
@@ -784,7 +877,7 @@ Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, t
 
 **Why it exists:** Out-of-tree symlinks are a classic exfiltration or confusion vector; the spec requires a hard error.
 
-**Expected outcome:** **xfail** for the Python client — it may **silently follow** or mis-handle. Intended: non-zero, clear error when signing.
+**Expected outcome:** Signing must fail (non-zero exit) with a clear error about out-of-root symlink.
 
 **Impact if it fails:** Security and clarity: the signing scope could include files outside the intended model directory.
 
@@ -797,9 +890,74 @@ Paths are under `test/test-cases/roundtrip/…`. Each case signs a model copy, t
 
 **Why it exists:** Cycles in symlink layouts must be detected; silent skip can hide parts of the tree or make behavior implementation-defined.
 
-**Expected outcome:** **xfail** — the Python client may **silently skip** cycles. Intended: sign fails with a clear cycle detection error.
+**Expected outcome:** Signing must fail (non-zero exit) with a clear cycle detection error.
 
 **Impact if it fails:** Unpredictable manifest contents or non-spec behavior when user models contain symlink cycles.
+
+#### `sigstore-simple`
+**Spec:** §4.1
+
+**What it tests:** End-to-end **keyless** sigstore signing and verification on a simple model. Uses a GitHub Actions OIDC token to obtain a Fulcio certificate and records a Rekor transparency log entry.
+
+**Setup:** Requires CI environment (`SIGSTORE_ID_TOKEN`). The sign step receives the OIDC token via `--identity-token`; the verify step checks `--identity` and `--identity-provider`. Skipped locally.
+
+**Why it exists:** Core validation that the `sigstore` method works end-to-end through the conformance adapter.
+
+**Expected outcome:** Sign succeeds (exit 0), bundle contains Fulcio cert + tlogEntries, verify succeeds.
+
+**Impact if it fails:** Sigstore signing/verification is broken in the client's conformance adapter.
+
+#### `sigstore-multi-file`
+**Spec:** §4.1, §6.1, §6.1.2
+
+**What it tests:** Keyless sigstore signing on a **multi-file model** with subdirectories. Ensures path canonicalization (§6.1.2) and file enumeration (§6.1) work correctly with sigstore bundles.
+
+**Setup:** Uses the `models/multi-file` fixture with nested directories. Requires CI.
+
+**Why it exists:** Validates that sigstore works beyond trivial single-file models and that path handling is consistent across signing methods.
+
+**Expected outcome:** All files in subdirectories correctly enumerated and signed. Verify succeeds.
+
+**Impact if it fails:** Path handling diverges between PKI methods, or sigstore bundles don't cover deep directory trees.
+
+#### `sigstore-ignore-paths`
+**Spec:** §4.1, §6.2
+
+**What it tests:** Keyless sigstore signing with `--ignore-paths` exclusions. Files matching the ignore list must not appear in the bundle.
+
+**Setup:** Uses `models/simple` with `ignore-me` excluded. Requires CI.
+
+**Why it exists:** Validates that `ignore_paths` semantics (§6.2) are consistent for the sigstore method.
+
+**Expected outcome:** Bundle contains only non-excluded files. Verify succeeds with matching ignore list.
+
+**Impact if it fails:** Path exclusion logic diverges between signing methods.
+
+#### `sigstore-single-file`
+**Spec:** §4.1, §6.1
+
+**What it tests:** Keyless sigstore sign-then-verify on a **single-file** model, ensuring the sigstore method handles the simplest possible model correctly.
+
+**Setup:** Uses `models/single-file`. Requires CI (OIDC token). Skipped locally.
+
+**Why it exists:** Validates that sigstore works for single-file models, not just directories.
+
+**Expected outcome:** Sign and verify both succeed. Skipped locally.
+
+**Impact if it fails:** Sigstore method cannot handle single-file models.
+
+#### `sigstore-sig-inside-model`
+**Spec:** §4.1, §6.2
+
+**What it tests:** Keyless sigstore signing with the **bundle placed inside the model directory**. Validates that the signature file is auto-excluded from the manifest (§6.2).
+
+**Setup:** Uses `models/simple` with `sig_inside_model: true`. Requires CI. Skipped locally.
+
+**Why it exists:** Tests signature file auto-exclusion with the sigstore method, ensuring the exclusion logic is method-agnostic.
+
+**Expected outcome:** Sign and verify succeed. Bundle does not include its own path in the manifest.
+
+**Impact if it fails:** Signature file auto-exclusion is broken for sigstore, causing verification to fail or including the bundle in its own manifest.
 
 ---
 
@@ -835,8 +993,9 @@ All cases share one shape. Roundtrip cases add a `sign` block; negative verify c
 | `model_relative_to` | no | `assets` | `assets` or `test_dir` (historical bundles colocated with model). |
 | `expect` | no | `pass` | `pass` or `fail` (e.g. empty-model rejection). |
 | `sig_inside_model` | no | `false` | If true, place `bundle.sig` inside the model copy for the test. |
-| `sign` | roundtrip | — | `private_key`, `signing_cert`, `cert_chain` as needed. |
-| `verify` | when verifying | — | `public_key`, `cert_chain`, `ignore_paths`, `ignore_unsigned_files`. |
+| `requires_ci` | no | `false` | If true, test is skipped outside CI (e.g. sigstore needing OIDC). |
+| `sign` | roundtrip | — | `private_key`, `signing_cert`, `cert_chain`, `identity_token_env`, `use_staging`. |
+| `verify` | when verifying | — | `public_key`, `cert_chain`, `ignore_paths`, `ignore_unsigned_files`, `identity`, `identity_provider`, `use_staging`. |
 | `expected_signed_files` | no | — | Exact sorted manifest file list to assert. |
 | `model_modifications` | no | — | `tamper` / `delete` / `inject` / `symlinks` for pre-sign or pre-verify model changes. |
 
@@ -868,8 +1027,8 @@ Example (abbreviated):
 | Category | Count |
 |---|---|
 | Verify — positive | 8 |
-| Verify — negative | 14 |
-| Verify — historical | 10 |
-| Roundtrip | 23 |
-| **Total** | **55** |
+| Verify — negative | 18 |
+| Verify — historical | 13 |
+| Roundtrip | 28 |
+| **Total** | **67** |
 

@@ -27,6 +27,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Skip sign+verify roundtrip tests (verify-only tests still run)",
     )
     parser.addoption(
+        "--skip-sigstore",
+        action="store_true",
+        default=False,
+        help="Skip all sigstore method tests",
+    )
+    parser.addoption(
         "--xfail",
         default="",
         help="Newline- or comma-separated list of test IDs to mark as xfail",

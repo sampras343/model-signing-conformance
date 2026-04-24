@@ -1,0 +1,13 @@
+{
+  "description": "FAIL: Sigstore verification must reject when certificate identity does not match (§4.1, §8.2)",
+  "method": "sigstore",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "expect": "fail",
+  "requires_ci": true,
+  "verify": {
+    "identity": "https://github.com/wrong-org/wrong-repo/.github/workflows/wrong.yml@refs/heads/main",
+    "identity_provider": "https://token.actions.githubusercontent.com",
+    "ignore_paths": ["ignore-me"]
+  }
+}

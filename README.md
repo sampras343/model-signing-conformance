@@ -2,7 +2,7 @@
 
 Conformance tests for [OpenSSF Model Signing (OMS)](https://github.com/ossf/model-signing-spec) language clients.
 
-**55 tests** — 23 roundtrip (sign-then-verify) + 32 verify (pre-committed bundles).
+**67 tests** — 28 roundtrip (sign-then-verify) + 39 verify (pre-committed bundles).
 Every client runs the same tests. See [`TEST_CASES.md`](TEST_CASES.md) for the full test index and spec coverage matrix.
 
 ---

@@ -1,0 +1,16 @@
+{
+  "description": "Keyless sigstore sign with bundle placed inside the model directory (§4.1, §6.2 — signature file auto-exclusion)",
+  "method": "sigstore",
+  "model": "models/simple",
+  "requires_ci": true,
+  "sig_inside_model": true,
+  "sign": {
+    "identity_token_env": "SIGSTORE_ID_TOKEN"
+  },
+  "verify": {
+    "identity": "${SIGSTORE_IDENTITY}",
+    "identity_provider": "https://token.actions.githubusercontent.com",
+    "ignore_paths": ["ignore-me"]
+  },
+  "expected_signed_files": ["signme-1", "signme-2"]
+}

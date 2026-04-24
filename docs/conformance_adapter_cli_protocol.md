@@ -39,6 +39,8 @@ ${ENTRYPOINT} sign-model [FLAGS]
 | `--signing-cert` | path | when method=certificate | no | PEM-encoded leaf signing certificate |
 | `--cert-chain` | path | when method=certificate | **yes** | PEM-encoded certificate (intermediate or root). Pass once per cert file. Order: leaf-to-root |
 | `--ignore-paths` | path | no | **yes** | Absolute path to exclude from signing. Pass once per path |
+| `--identity-token` | string | when method=sigstore | no | OIDC identity token for Fulcio (keyless signing) |
+| `--use-staging` | flag | no | no | Use Sigstore staging infrastructure instead of production |
 
 **Exit code:** `0` = bundle written successfully. Non-zero = signing failed.
 
@@ -62,6 +64,14 @@ function sign_model(args):
             ignore_paths = args.ignore_paths or [],
         )
 
+    elif args.method == "sigstore":
+        result = client.sign(
+            model_path = args.model_path,
+            identity_token = args.identity_token,
+            ignore_paths = args.ignore_paths or [],
+            use_staging = args.use_staging,
+        )
+
     write_file(args.output_bundle, result.bundle_bytes)
     exit(0)
 ```
@@ -83,6 +93,9 @@ ${ENTRYPOINT} verify-model [FLAGS]
 | `--cert-chain` | path | when method=certificate | **yes** | PEM-encoded trust anchor certificate(s). Pass once per cert file |
 | `--ignore-paths` | path | no | **yes** | Absolute path to exclude from verification. Pass once per path |
 | `--ignore-unsigned-files` | flag | no | no | Boolean flag (no value). When present, tolerate files on disk not covered by the bundle |
+| `--identity` | string | when method=sigstore | no | Expected certificate identity (SAN) for keyless verification |
+| `--identity-provider` | string | when method=sigstore | no | Expected OIDC issuer URL |
+| `--use-staging` | flag | no | no | Use Sigstore staging infrastructure instead of production |
 
 **Exit code:** `0` = verification succeeded. Non-zero = verification failed.
 
@@ -108,6 +121,17 @@ function verify_model(args):
             trusted_certs = [load_pem(c) for c in args.cert_chain],
             ignore_paths = args.ignore_paths or [],
             ignore_unsigned = args.ignore_unsigned_files,
+        )
+
+    elif args.method == "sigstore":
+        ok = client.verify(
+            model_path = args.model_path,
+            bundle = bundle,
+            expected_identity = args.identity,
+            expected_issuer = args.identity_provider,
+            ignore_paths = args.ignore_paths or [],
+            ignore_unsigned = args.ignore_unsigned_files,
+            use_staging = args.use_staging,
         )
 
     exit(0 if ok else 1)
@@ -136,6 +160,10 @@ This table shows which flags are relevant for each method:
 | `--signing-cert` | — | sign | — |
 | `--cert-chain` | — | sign + verify | — |
 | `--public-key` | verify | — | — |
+| `--identity-token` | — | — | sign |
+| `--identity` | — | — | verify |
+| `--identity-provider` | — | — | verify |
+| `--use-staging` | — | — | both |
 | `--ignore-paths` | both | both | both |
 | `--ignore-unsigned-files` | verify | verify | verify |
 

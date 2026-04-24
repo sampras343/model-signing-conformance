@@ -27,6 +27,23 @@ inputs:
           test_verify[historical/historical-v0.2.0-certificate]
     default: ''
 
+  skip-sigstore:
+    description: >
+      Set to 'true' to skip sigstore tests (for offline environments or
+      adapters that do not implement sigstore signing/verification).
+    default: 'false'
+
+  sigstore-identity:
+    description: >
+      Expected certificate identity (SAN) for sigstore verification.
+      Defaults to the OIDC beacon workflow identity.
+    default: 'https://github.com/sigstore-conformance/extremely-dangerous-public-oidc-beacon/.github/workflows/extremely-dangerous-oidc-beacon.yml@refs/heads/main'
+
+  sigstore-issuer:
+    description: >
+      Expected OIDC issuer URL for sigstore verification.
+    default: 'https://token.actions.githubusercontent.com'
+
   skip-result-upload:
     description: >
       Set to 'true' to skip uploading the conformance-report.json artifact.
@@ -44,6 +61,10 @@ runs:
       shell: bash
       run: pip install -q -r "${{ github.action_path }}/requirements.txt"
 
+    - name: Obtain OIDC token for sigstore tests
+      if: ${{ inputs.skip-sigstore != 'true' }}
+      uses: sigstore-conformance/extremely-dangerous-public-oidc-beacon@main
+
     - name: Run conformance tests
       shell: bash
       run: python "${{ github.action_path }}/action.py"
@@ -51,7 +72,11 @@ runs:
         INPUT_ENTRYPOINT: ${{ inputs.entrypoint }}
         INPUT_SKIP_SIGNING: ${{ inputs.skip-signing }}
         INPUT_XFAIL: ${{ inputs.xfail }}
+        INPUT_SKIP_SIGSTORE: ${{ inputs.skip-sigstore }}
         INPUT_SKIP_RESULT_UPLOAD: ${{ inputs.skip-result-upload }}
+        SIGSTORE_ID_TOKEN_FILE: ./oidc-token.txt
+        SIGSTORE_IDENTITY: ${{ inputs.sigstore-identity }}
+        SIGSTORE_ISSUER: ${{ inputs.sigstore-issuer }}
 
     - name: Upload conformance report
       if: ${{ always() && inputs.skip-result-upload != 'true' }}
