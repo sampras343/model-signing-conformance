@@ -1,0 +1,12 @@
+{
+  "description": "FAIL: Signing an empty model directory must be rejected (§6.1 — model MUST contain at least one file)",
+  "method": "key",
+  "model": "models/empty",
+  "expect": "fail",
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "description": "FAIL: Rejection when signing certificate in bundle is expired (notAfter: 2020-01-02)",
+  "method": "certificate",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ]
+  }
+}

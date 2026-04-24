@@ -6,15 +6,23 @@ import json
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
+
+_VALID_EXPECT = ("pass", "fail")
+_VALID_RELATIVE_TO = ("assets", "test_dir")
+
+
+class ConfigError(Exception):
+    """Raised when a test config.json is invalid."""
 
 
 @dataclass
 class ModelModifications:
     """Modifications to apply to a copied model before verification."""
-    tamper: dict[str, str] = field(default_factory=dict)  # {filename: new_content}
-    delete: list[str] = field(default_factory=list)       # filenames to delete
-    inject: dict[str, str] = field(default_factory=dict)  # {filename: content}
+    tamper: dict[str, str] = field(default_factory=dict)
+    delete: list[str] = field(default_factory=list)
+    inject: dict[str, str] = field(default_factory=dict)
+    symlinks: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict) -> "ModelModifications":
@@ -22,6 +30,7 @@ class ModelModifications:
             tamper=data.get("tamper", {}),
             delete=data.get("delete", []),
             inject=data.get("inject", {}),
+            symlinks=data.get("symlinks", {}),
         )
 
     def apply(self, model_dir: Path) -> None:
@@ -34,6 +43,10 @@ class ModelModifications:
                 path.unlink()
         for filename, content in self.inject.items():
             (model_dir / filename).write_text(content)
+        for name, target in self.symlinks.items():
+            link = model_dir / name
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to(target)
 
 
 @dataclass
@@ -73,19 +86,22 @@ class VerifyBlock:
 @dataclass
 class CaseConfig:
     """Unified test configuration for both verify and roundtrip tests."""
+    description: str
     method: str
-    model: Optional[str] = None              # relative to assets/ (new style)
-    model_path: Optional[str] = None         # relative to test case dir (legacy)
-    sign: Optional[SignBlock] = None         # signing parameters (roundtrip only)
-    verify: Optional[VerifyBlock] = None     # verification parameters
+    model: str
+    model_relative_to: Literal["assets", "test_dir"] = "assets"
+    expect: Literal["pass", "fail"] = "pass"
+    sig_inside_model: bool = False
+    sign: Optional[SignBlock] = None
+    verify: Optional[VerifyBlock] = None
     expected_signed_files: Optional[list[str]] = None
     model_modifications: Optional[ModelModifications] = None
 
     @classmethod
     def from_json(cls, path: Path) -> "CaseConfig":
         data = json.loads(path.read_text())
+        cls._validate_raw(data, path)
 
-        # Parse nested blocks if present
         sign_block = None
         if "sign" in data:
             sign_block = SignBlock.from_dict(data["sign"])
@@ -99,17 +115,36 @@ class CaseConfig:
             mods = ModelModifications.from_dict(data["model_modifications"])
 
         return cls(
+            description=data["description"],
             method=data["method"],
-            model=data.get("model"),
-            model_path=data.get("model_path"),
+            model=data["model"],
+            model_relative_to=data.get("model_relative_to", "assets"),
+            expect=data.get("expect", "pass"),
+            sig_inside_model=data.get("sig_inside_model", False),
             sign=sign_block,
             verify=verify_block,
             expected_signed_files=data.get("expected_signed_files"),
             model_modifications=mods,
         )
 
+    @staticmethod
+    def _validate_raw(data: dict, path: Path) -> None:
+        """Validate required fields and enum values."""
+        for key in ("description", "method", "model"):
+            if key not in data:
+                raise ConfigError(f"{path}: missing required field '{key}'")
+        rel = data.get("model_relative_to", "assets")
+        if rel not in _VALID_RELATIVE_TO:
+            raise ConfigError(
+                f"{path}: 'model_relative_to' must be one of {_VALID_RELATIVE_TO}, got '{rel}'"
+            )
+        expect = data.get("expect", "pass")
+        if expect not in _VALID_EXPECT:
+            raise ConfigError(
+                f"{path}: 'expect' must be one of {_VALID_EXPECT}, got '{expect}'"
+            )
 
-# Aliases for convenience
+
 TestConfig = CaseConfig
 
 

@@ -1,0 +1,13 @@
+{
+  "description": "Backwards compatibility: key-signed bundle from Go v1.1.0 (with ignore_paths in predicate)",
+  "method": "key",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "expected_signed_files": ["signme-1", "signme-2"],
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

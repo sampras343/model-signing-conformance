@@ -1,0 +1,17 @@
+{
+  "description": "FAIL: Model containing a symlink pointing outside the model root must be rejected (§6.1.1)",
+  "method": "key",
+  "model": "models/simple",
+  "expect": "fail",
+  "model_modifications": {
+    "symlinks": {
+      "outside-link": "/tmp/nonexistent-target"
+    }
+  },
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
+}

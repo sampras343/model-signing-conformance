@@ -1,0 +1,12 @@
+{
+  "description": "FAIL: Rejection of bundle with incorrect predicateType (not the OMS predicate)",
+  "method": "key",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

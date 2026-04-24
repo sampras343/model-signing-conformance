@@ -1,0 +1,10 @@
+{
+  "description": "Backwards compatibility: key-signed (EC) bundle from Go v0.3.1 (first key-based signing release)",
+  "method": "key",
+  "model": "model/signme-1",
+  "model_relative_to": "test_dir",
+  "expected_signed_files": ["."],
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem"
+  }
+}

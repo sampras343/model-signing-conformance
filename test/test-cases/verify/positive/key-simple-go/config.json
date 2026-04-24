@@ -1,0 +1,10 @@
+{
+  "description": "Go-signed key-based verification (cross-client interop: Go signs, test client verifies)",
+  "method": "key",
+  "model": "models/simple",
+  "expected_signed_files": ["signme-1", "signme-2"],
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": ["ignore-me"]
+  }
+}

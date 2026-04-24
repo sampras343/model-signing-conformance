@@ -1,0 +1,1 @@
+Python model_signing silently skips symlink cycles instead of reporting an error (spec §6.1.1 violation: MUST detect and reject cycles)

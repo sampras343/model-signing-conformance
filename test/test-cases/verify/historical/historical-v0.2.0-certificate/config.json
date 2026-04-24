@@ -1,0 +1,11 @@
+{
+  "description": "Backwards compatibility: certificate-signed bundle from Go v0.2.0 (first Sigstore bundle format)",
+  "method": "certificate",
+  "model": "model",
+  "model_relative_to": "test_dir",
+  "verify": {
+    "cert_chain": [
+      "keys/certificate/ca-cert.pem"
+    ]
+  }
+}

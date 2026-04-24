@@ -1,0 +1,19 @@
+{
+  "description": "Verifies signature file placed inside the model directory is auto-excluded from the manifest (§6.2)",
+  "method": "key",
+  "model": "models/simple",
+  "sig_inside_model": true,
+  "expected_signed_files": [
+    "signme-1",
+    "signme-2"
+  ],
+  "sign": {
+    "private_key": "keys/certificate/signing-key.pem"
+  },
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "description": "FAIL: Rejection when CA certificate used for verification is not the signing CA",
+  "method": "certificate",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "cert_chain": [
+      "keys/wrong/wrong-ca-cert.pem"
+    ],
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}
