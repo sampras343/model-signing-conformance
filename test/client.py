@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,13 @@ from typing import Literal, Optional
 
 _VALID_EXPECT = ("pass", "fail")
 _VALID_RELATIVE_TO = ("assets", "test_dir")
+
+_SHARD_SUFFIX_RE = re.compile(r":\d+:\d+$")
+
+
+def _is_shard_resource(name: str) -> bool:
+    """Return True if *name* looks like a shard resource (``path:start:end``)."""
+    return _SHARD_SUFFIX_RE.search(name) is not None
 
 
 def _read_identity_token(env_name: str) -> str:
@@ -295,6 +303,5 @@ class ModelSigningClient:
         payload_b64 = bundle_data["dsseEnvelope"]["payload"]
         payload = json.loads(base64.b64decode(payload_b64))
         resources = payload["predicate"]["resources"]
-        # Filter out shard entries (name contains ':shard-')
-        names = [r["name"] for r in resources if ":shard-" not in r["name"]]
+        names = [r["name"] for r in resources if not _is_shard_resource(r["name"])]
         return sorted(names)

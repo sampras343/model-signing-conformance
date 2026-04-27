@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**67 tests** total: **28 roundtrip** (live sign, then verify) and **39 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in [`SPEC.md`](SPEC.md); section references below use the same numbering as that spec.
+**67 tests** total: **28 roundtrip** (live sign, then verify) and **39 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -45,7 +45,7 @@
 | §6.2.1 | Top-level matching for default excludes | key-default-ignores | Covered |
 | §6.2.1 | Exact relative path for user ignores | key-ignore-paths | Covered |
 | §6.3.1 | File serialization (files method) | All roundtrip tests | Covered |
-| §6.3.2 | Shard serialization (file-shard-N) | — | Not covered (client limitation) |
+| §6.3.2 | Shard serialization (`"shards"` method) | — | Not covered (client limitation) |
 | §6.4 | Resource descriptors sorted by name | _assert_resources_sorted (all roundtrip) | Covered |
 | §6.5.1 | Root digest = SHA-256 of concatenated digests | _assert_root_digest (all roundtrip) | Covered |
 | §7 | sha256 REQUIRED | All tests | Covered |
@@ -63,7 +63,8 @@
 | §8.5 | --ignore-unsigned-files | key-ignore-unsigned, key-simple-ignore-unsigned-files | Covered |
 | §9 | Bundle excluded from signing scope | key-sig-inside-model | Covered |
 | §10 | Conformance (sha256, files, key minimum) | All tests | Covered |
-| §11 | Historical backward compatibility | 10 historical tests (v0.2.0–v1.1.0) | Covered |
+| §10 | Rejection of unsupported algorithm/method with informative error | — | Not covered (needs adapter protocol extension) |
+| §11 | Historical backward compatibility | 13 historical tests (v0.2.0–v1.1.0) | Covered |
 | §11 | Deterministic signing | key-simple-deterministic | Covered |
 
 ---
@@ -976,8 +977,9 @@ After each successful `sign`, the harness (via `test/test_roundtrip.py` and `oms
 
 | Spec | Gap | Why |
 |---|---|---|
-| §6.3.2 | `file-shard-N` sharding | Adapter CLI does not expose `--serialization` flag; needs protocol extension. |
+| §6.3.2 | Shard serialization (`"shards"` method) | Adapter CLI does not expose `--serialization` flag; needs protocol extension. |
 | §7 | BLAKE2b / BLAKE3 | Optional algorithms; adapter CLI does not expose `--hash-algorithm` flag. |
+| §10 | Rejection of unsupported algorithm/method | No negative test that requests an unsupported hash or serialization method and asserts an informative error. Needs adapter protocol extension for `--hash-algorithm` and `--serialization`. |
 
 ---
 

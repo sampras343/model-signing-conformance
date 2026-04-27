@@ -28,10 +28,10 @@ jobs:
             workflow: benchmark.yml
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Download benchmark artifact from ${{ matrix.client.repo }}
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
         with:
           github_token: ${{ secrets.CONFORMANCE_READ_TOKEN }}
           repo: ${{ matrix.client.repo }}
@@ -51,7 +51,7 @@ jobs:
             echo '[]' > results/${{ matrix.client.name }}.json
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: benchmark-result-${{ matrix.client.name }}
           path: results/${{ matrix.client.name }}.json
@@ -63,21 +63,21 @@ jobs:
     if: always()
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
       - name: Download all client benchmark results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: benchmark-result-*
           merge-multiple: true
           path: results/
 
       - name: Download previous benchmark snapshot
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # v6
         with:
           workflow: collect-benchmarks.yml
           name: benchmark-snapshot
@@ -106,13 +106,13 @@ jobs:
             $PREV_FLAG \
             --output results/benchmarks-index.html
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: benchmark-snapshot
           path: results/*.json
           if-no-files-found: warn
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: benchmark-html
           path: results/benchmarks-index.html
