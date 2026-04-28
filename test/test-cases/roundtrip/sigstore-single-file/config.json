@@ -8,6 +8,6 @@
   },
   "verify": {
     "identity": "${SIGSTORE_IDENTITY}",
-    "identity_provider": "https://token.actions.githubusercontent.com"
+    "identity_provider": "${SIGSTORE_ISSUER}"
   }
 }

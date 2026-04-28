@@ -36,13 +36,13 @@ inputs:
   sigstore-identity:
     description: >
       Expected certificate identity (SAN) for sigstore verification.
-      Defaults to the OIDC beacon workflow identity.
-    default: 'https://github.com/sigstore-conformance/extremely-dangerous-public-oidc-beacon/.github/workflows/extremely-dangerous-oidc-beacon.yml@refs/heads/main'
+      Defaults to the sigstore-conformance GCP service account.
+    default: 'untrusted-sa@sigstore-conformance.iam.gserviceaccount.com'
 
   sigstore-issuer:
     description: >
       Expected OIDC issuer URL for sigstore verification.
-    default: 'https://token.actions.githubusercontent.com'
+    default: 'https://accounts.google.com'
 
   skip-result-upload:
     description: >
@@ -63,7 +63,10 @@ runs:
 
     - name: Obtain OIDC token for sigstore tests
       if: ${{ inputs.skip-sigstore != 'true' }}
-      uses: sigstore-conformance/extremely-dangerous-public-oidc-beacon@977e8d08554ca9bda279c96e91be2119fb67c730 # main 2026-04-22
+      shell: bash
+      run: |
+        curl -sSfL -o oidc-token.txt \
+          https://storage.googleapis.com/sigstore-conformance-testing-token/untrusted-testing-token.txt
 
     - name: Run conformance tests
       shell: bash
