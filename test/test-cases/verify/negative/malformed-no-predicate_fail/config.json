@@ -1,11 +1,8 @@
 {
-  "description": "Verifies --ignore-paths correctly excludes files from the signed manifest",
+  "description": "FAIL: Rejection of bundle where in-toto statement has no predicate field (\u00a78.3 \u2014 predicate MUST be present)",
   "method": "key",
   "model": "models/simple",
-  "expected_signed_files": [
-    "signme-1",
-    "signme-2"
-  ],
+  "expect": "fail",
   "verify": {
     "public_key": "keys/certificate/signing-key-pub.pem",
     "ignore_paths": [

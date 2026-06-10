@@ -1,0 +1,12 @@
+{
+  "description": "FAIL: Rejection of bundle with wrong in-toto statement _type (\u00a78.3 \u2014 _type MUST be https://in-toto.io/Statement/v1)",
+  "method": "key",
+  "model": "models/simple",
+  "expect": "fail",
+  "verify": {
+    "public_key": "keys/certificate/signing-key-pub.pem",
+    "ignore_paths": [
+      "ignore-me"
+    ]
+  }
+}
