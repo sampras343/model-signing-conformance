@@ -1,6 +1,6 @@
 # Conformance test cases
 
-**67 tests** total: **28 roundtrip** (live sign, then verify) and **39 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
+**71 tests** total: **28 roundtrip** (live sign, then verify) and **43 verify** (pre-committed offline bundles). This document indexes the **Open Model Signing (OMS)** conformance suite in this repository. Requirements are as defined in the [OMS Specification](https://github.com/ossf/model-signing-spec/blob/main/spec/v1.0.md); section references below use the same numbering as that spec.
 
 **oms-schemas:** Every successful roundtrip run validates produced bundles and decoded DSSE payloads against the published OMS JSON Schemas from the `oms-schemas` package (outer bundle, statement, predicate, resources), in addition to the test harness’s own structural checks.
 
@@ -18,36 +18,42 @@
 | §4.1 | Accept hint or rawBytes in publicKey | historical-v0.3.1/v1.0.0 (rawBytes) vs v1.1.0 (hint) | Covered |
 | §4.1 | Accept keyid absent/empty/null | Go vs Python bundles | Covered |
 | §4.1 | Certificate validity period enforced | certificate-expired_fail | Covered |
-| §4.1 | Method-specific verificationMaterial match | key-verify-as-certificate_fail | Covered |
+| §4.1 | Method-specific verificationMaterial match | key-verify-as-certificate_fail, sigstore-verify-as-key_fail | Covered |
 | §4.2 | EC P-384 key support | key-p384 | Covered |
 | §4.2 | EC P-521 key support | key-p521 | Covered |
-| §5.1 | predicateType exact match | malformed-wrong-predicate_fail | Covered |
+| §5.1 | predicateType exact match | malformed-wrong-predicate_fail, _assert_statement_fields (roundtrip) | Covered |
 | §5.1 | Deprecated v0.1 backward compat | historical-v0.2.0-certificate | Covered |
-| §5.2.1 | resources minItems 1 | Schema validation (all roundtrip/positive) | Covered |
+| §5.2.1 | resources minItems 1 | malformed-empty-resources_fail, _assert_resource_fields (roundtrip) | Covered |
 | §5.2.1 | resources sorted by name | _assert_resources_sorted (all roundtrip) | Covered |
+| §5.2.1 | Resource descriptor required fields (name, digest, algorithm) | _assert_resource_fields (all roundtrip) | Covered |
 | §5.2.1 | Only regular files, no directory entries | Implicit in all tests | Covered |
-| §5.2.2 | serialization required fields | Schema validation | Covered |
+| §5.2.2 | serialization required fields (method, hash_type, allow_symlinks) | _assert_serialization_fields (all roundtrip) | Covered |
+| §5.2.2 | shard_size absent when method is "files" | _assert_serialization_fields (all roundtrip) | Covered |
 | §6.1 | Recursive file enumeration | key-multi-file | Covered |
 | §6.1 | Model MUST have ≥1 file after exclusions | key-empty-model-rejected | Covered |
 | §6.1.1 | Symlink rejected by default (allow_symlinks=false) | key-symlink-default-rejected | Covered |
 | §6.1.1 | Out-of-root symlink MUST error | key-symlink-outside-root | Covered |
 | §6.1.1 | Symlink cycle MUST error | key-symlink-cycle | Covered |
-| §6.1.2 | Forward slash path separator | All multi-file tests | Covered |
-| §6.1.2 | Paths relative to model root | key-multi-file (subdir/adapter.bin) | Covered |
+| §6.1.2 | Forward slash path separator | All multi-file tests, _assert_resource_fields | Covered |
+| §6.1.2 | Paths relative (no leading /, no ../) | _assert_resource_fields (all roundtrip) | Covered |
+| §6.1.2 | Paths no trailing / | _assert_resource_fields (all roundtrip) | Covered |
 | §6.1.2 | Single-file basename only | key-single-file | Covered |
 | §6.1.2 | Case-sensitive comparison | Implicit | Covered |
 | §6.1.2 | UTF-8 filenames | key-unicode-filename | Covered |
 | §6.2 | Default git path exclusions | key-default-ignores | Covered |
 | §6.2 | Non-git dotfiles NOT excluded | key-dotfile-included | Covered |
 | §6.2 | Hidden subdirectories NOT excluded | key-files-in-hidden-dir | Covered |
-| §6.2 | User --ignore-paths | key-ignore-paths | Covered |
+| §6.2 | User --ignore-paths | key-ignore-paths (roundtrip), key-simple (verify) | Covered |
 | §6.2 | Signature file auto-exclusion | key-sig-inside-model | Covered |
 | §6.2.1 | Top-level matching for default excludes | key-default-ignores | Covered |
 | §6.2.1 | Exact relative path for user ignores | key-ignore-paths | Covered |
 | §6.3.1 | File serialization (files method) | All roundtrip tests | Covered |
 | §6.3.2 | Shard serialization (`"shards"` method) | — | Not covered (client limitation) |
 | §6.4 | Resource descriptors sorted by name | _assert_resources_sorted (all roundtrip) | Covered |
+| §6.5 | subject MUST contain exactly one entry | malformed-no-subject_fail, _assert_subject (roundtrip) | Covered |
+| §6.5 | subject[0].name MUST be non-empty | _assert_subject (all roundtrip) | Covered |
 | §6.5.1 | Root digest = SHA-256 of concatenated digests | _assert_root_digest (all roundtrip) | Covered |
+| §6.5.1 | subject[0].digest MUST contain sha256 key | _assert_subject (all roundtrip) | Covered |
 | §7 | sha256 REQUIRED | All tests | Covered |
 | §7 | blake2b OPTIONAL | — | Not covered (optional, not CLI-accessible) |
 | §7 | blake3 OPTIONAL | — | Not covered (optional, not CLI-accessible) |
@@ -55,12 +61,14 @@
 | §8.1 | mediaType validation | key-simple-wrong-mediatype_fail | Covered |
 | §8.2 | Signature vs wrong key | key-simple-wrong-key_fail | Covered |
 | §8.2 | Signature vs wrong CA | certificate-simple-wrong-ca_fail | Covered |
-| §8.3 | Statement validation | Schema validation | Covered |
-| §8.3 | Wrong predicateType rejection | malformed-wrong-predicate_fail | Covered |
-| §8.4 | Tampered content detection | key-simple-tampered-content_fail | Covered |
+| §8.3 | _type MUST be https://in-toto.io/Statement/v1 | malformed-wrong-statement-type_fail, _assert_statement_fields (roundtrip) | Covered |
+| §8.3 | predicateType validation | malformed-wrong-predicate_fail, _assert_statement_fields (roundtrip) | Covered |
+| §8.3 | predicate MUST be present | malformed-no-predicate_fail | Covered |
+| DSSE | payloadType MUST be application/vnd.in-toto+json | malformed-wrong-payload-type_fail, _assert_statement_fields (roundtrip) | Covered |
+| §8.4 | Tampered content detection | key-simple-tampered-content_fail, sigstore-tampered-content_fail | Covered |
 | §8.4 | Missing file detection | key-simple-missing-file_fail | Covered |
 | §8.4 | Extra unsigned file detection | key-simple-extra-file_fail | Covered |
-| §8.5 | --ignore-unsigned-files | key-ignore-unsigned, key-simple-ignore-unsigned-files | Covered |
+| §8.5 | --ignore-unsigned-files | key-ignore-unsigned (roundtrip), key-simple-ignore-unsigned-files (verify) | Covered |
 | §9 | Bundle excluded from signing scope | key-sig-inside-model | Covered |
 | §10 | Conformance (sha256, files, key minimum) | All tests | Covered |
 | §10 | Rejection of unsupported algorithm/method with informative error | — | Not covered (needs adapter protocol extension) |
@@ -73,7 +81,7 @@
 
 Paths are under `test/test-cases/verify/…` unless noted. “Verify” means the client checks a pre-built bundle and model without signing in that run.
 
-### Positive cases (8)
+### Positive cases (7)
 
 #### `key-simple`
 **Spec:** §4.1, §6.2, §8.1–§8.4
@@ -113,19 +121,6 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 **Expected outcome:** Exit code 0. The expected signed file list, sorted, is exactly `["config.json", "subdir/adapter.bin", "weights.bin"]`.
 
 **Impact if it fails:** Models with nested directories cannot be signed or verified reliably.
-
-#### `key-ignore-paths`
-**Spec:** §6.2, §6.2.1
-
-**What it tests:** That user-supplied `--ignore-paths` correctly excludes files from the signed set and that verification still matches the resulting manifest.
-
-**Setup:** Model has `signme-1`, `signme-2`, and `ignore-me`. The bundle was created with `ignore-me` excluded.
-
-**Why it exists:** Authors must omit secrets, build artifacts, or other non-model files from the signed scope; exclusion semantics must be consistent between signing and verification.
-
-**Expected outcome:** Exit code 0. The bundle contains only `signme-1` and `signme-2` (not `ignore-me`).
-
-**Impact if it fails:** Non-model files cannot be excluded safely; manifests may drift or verification may fail in realistic repos.
 
 #### `key-single-file`
 **Spec:** §6.1.2
@@ -352,7 +347,7 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** Latest sigstore bundles from Go v1.1.0 are unverifiable.
 
-### Negative cases (18)
+### Negative cases (23)
 
 #### `key-simple-tampered-content_fail`
 **Spec:** §8.4
@@ -588,13 +583,78 @@ Paths are under `test/test-cases/verify/…` unless noted. “Verify” means th
 
 **Impact if it fails:** **Integrity failure.** Sigstore-signed bundles do not detect content tampering.
 
+#### `malformed-wrong-statement-type_fail`
+**Spec:** §8.3
+
+**What it tests:** That the verifier rejects a bundle where the in-toto statement's `_type` field is not the required `https://in-toto.io/Statement/v1`.
+
+**Setup:** A crafted bundle with `_type` set to `https://in-toto.io/Statement/v0.1` in the decoded payload. The DSSE signature no longer covers the modified payload, so the verifier should reject via signature failure or explicit `_type` validation.
+
+**Why it exists:** The spec requires `_type` MUST be `"https://in-toto.io/Statement/v1"`. Accepting a wrong statement type could cause the verifier to misinterpret the payload structure.
+
+**Expected outcome:** Non-zero exit; verification must fail.
+
+**Impact if it fails:** Bundles with wrong in-toto statement versions could be silently accepted.
+
+#### `malformed-wrong-payload-type_fail`
+**Spec:** DSSE
+
+**What it tests:** That the verifier rejects a bundle where the DSSE envelope's `payloadType` is not `application/vnd.in-toto+json`.
+
+**Setup:** A bundle with `payloadType` changed to `application/json`. The DSSE Pre-Authentication Encoding (PAE) includes the payload type, so the signature becomes invalid.
+
+**Why it exists:** The `payloadType` is part of the DSSE PAE and determines how the payload is interpreted. A wrong value must be rejected to prevent type confusion.
+
+**Expected outcome:** Non-zero exit; verification must fail.
+
+**Impact if it fails:** Bundles with wrong payload types could be accepted, breaking DSSE's type-safety guarantee.
+
+#### `malformed-no-predicate_fail`
+**Spec:** §8.3
+
+**What it tests:** That the verifier rejects a bundle where the in-toto statement has no `predicate` field.
+
+**Setup:** A crafted bundle with the `predicate` key removed from the decoded statement. The modified payload invalidates the DSSE signature.
+
+**Why it exists:** The spec requires `predicate` MUST be present and conform to the OMS predicate schema. A missing predicate means there is no resource manifest to verify.
+
+**Expected outcome:** Non-zero exit; verification must fail.
+
+**Impact if it fails:** Bundles without any resource manifest could pass verification, defeating the entire purpose of model signing.
+
+#### `malformed-empty-resources_fail`
+**Spec:** §5.2.1
+
+**What it tests:** That the verifier rejects a bundle where the `resources` array in the predicate is empty.
+
+**Setup:** A crafted bundle with `resources` set to `[]`. The modified payload invalidates the DSSE signature.
+
+**Why it exists:** The spec requires `resources` MUST contain at least one entry. An empty resources array means no files were signed — verification should not succeed for such a bundle.
+
+**Expected outcome:** Non-zero exit; verification must fail.
+
+**Impact if it fails:** Bundles that sign zero files could pass verification, providing no integrity guarantee.
+
+#### `malformed-no-subject_fail`
+**Spec:** §6.5
+
+**What it tests:** That the verifier rejects a bundle where the in-toto statement's `subject` array is empty.
+
+**Setup:** A crafted bundle with `subject` set to `[]`. The modified payload invalidates the DSSE signature.
+
+**Why it exists:** The spec requires `subject` MUST contain exactly one entry with the root digest. An empty subject means there is no root digest to anchor the verification.
+
+**Expected outcome:** Non-zero exit; verification must fail.
+
+**Impact if it fails:** Bundles without a root digest anchor could pass verification, undermining the chain of trust from subject to individual file digests.
+
 ---
 
 ## Category 2: Roundtrip tests (28)
 
 Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then verifies it using the test harness, exercising live crypto and I/O.
 
-> **Note:** After every successful `sign`, the produced bundle is validated structurally: OMS JSON Schemas from **oms-schemas** apply to the outer bundle and decoded statement/predicate; the harness asserts resource descriptors are **sorted** by `name` (§6.4), recomputes the **root digest** (§6.5.1), and when the case uses `sig_inside_model`, checks that the signature file is **excluded** from the signed set (§6.2, §9).
+> **Note:** After every successful `sign`, the produced bundle is validated structurally: OMS JSON Schemas from **oms-schemas** apply to the outer bundle and decoded statement/predicate; the harness asserts **statement fields** (`_type`, `predicateType`, `payloadType` — §5.1, §8.3, DSSE), **subject** structure (exactly one entry, non-empty name, `sha256` digest — §6.5), **serialization** required fields (`method`, `hash_type`, `allow_symlinks` — §5.2.2), **resource descriptor** required fields and path constraints (`name`, `digest`, `algorithm`, no leading `/`, no `../`, no trailing `/` — §5.2.1, §6.1.2), resource descriptors are **sorted** by `name` (§6.4), recomputes the **root digest** (§6.5.1), and when the case uses `sig_inside_model`, checks that the signature file is **excluded** from the signed set (§6.2, §9).
 
 #### `key-simple`
 **Spec:** §4.1, §5.2, §6.1–§6.5, §8.1–§8.4
@@ -967,6 +1027,10 @@ Paths are under `test/test-cases/roundtrip/`. Each case signs a model copy, then
 After each successful `sign`, the harness (via `test/test_roundtrip.py` and `oms-schemas`) checks:
 
 - **JSON Schema** for the outer bundle and the statement/predicate (§8.1, §8.3).
+- **Statement fields** — `_type` is `https://in-toto.io/Statement/v1`, `predicateType` is `https://model_signing/signature/v1.0`, and `payloadType` is `application/vnd.in-toto+json` (§5.1, §8.3, DSSE).
+- **Subject** — exactly one entry with a non-empty `name` and a `sha256` key in `digest` (§6.5, §6.5.1).
+- **Serialization fields** — `method`, `hash_type`, `allow_symlinks` are present; `shard_size` absent when method is `"files"` (§5.2.2).
+- **Resource descriptor fields** — each resource has `name`, `digest`, `algorithm`; paths have no leading `/`, no `../`, no trailing `/` (§5.2.1, §6.1.2).
 - **Resource descriptor order** — lexicographic by `name` (§6.4).
 - **Root digest** — recomputed from per-file digests (§6.5.1).
 - **Signature file exclusion** when `sig_inside_model` is set — bundle path not in signed set (§6.2, §9).
@@ -978,6 +1042,7 @@ After each successful `sign`, the harness (via `test/test_roundtrip.py` and `oms
 | Spec | Gap | Why |
 |---|---|---|
 | §6.3.2 | Shard serialization (`"shards"` method) | Adapter CLI does not expose `--serialization` flag; needs protocol extension. |
+| §6.3.2 | Verifier MUST reject unsupported shard method with informative error | Requires a pre-committed shard bundle and adapter awareness of shard method. |
 | §7 | BLAKE2b / BLAKE3 | Optional algorithms; adapter CLI does not expose `--hash-algorithm` flag. |
 | §10 | Rejection of unsupported algorithm/method | No negative test that requests an unsupported hash or serialization method and asserts an informative error. Needs adapter protocol extension for `--hash-algorithm` and `--serialization`. |
 
@@ -1028,9 +1093,9 @@ Example (abbreviated):
 
 | Category | Count |
 |---|---|
-| Verify — positive | 8 |
-| Verify — negative | 18 |
+| Verify — positive | 7 |
+| Verify — negative | 23 |
 | Verify — historical | 13 |
 | Roundtrip | 28 |
-| **Total** | **67** |
+| **Total** | **71** |
 

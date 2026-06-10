@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 from pathlib import Path
 
@@ -66,6 +65,84 @@ def _assert_root_digest(bundle_path: Path) -> None:
         f"  subject.digest.sha256: {actual}\n"
         f"  recomputed from resources: {expected}"
     )
+
+
+def _assert_statement_fields(bundle_path: Path) -> None:
+    """Assert in-toto statement has correct _type, predicateType, and payload type (§5.1, §8.3)."""
+    bundle = json.loads(bundle_path.read_text())
+
+    payload_type = bundle["dsseEnvelope"]["payloadType"]
+    assert payload_type == "application/vnd.in-toto+json", (
+        f"payloadType must be 'application/vnd.in-toto+json', got '{payload_type}'"
+    )
+
+    statement = decode_payload(bundle)
+
+    stmt_type = statement.get("_type")
+    assert stmt_type == "https://in-toto.io/Statement/v1", (
+        f"_type must be 'https://in-toto.io/Statement/v1', got '{stmt_type}'"
+    )
+
+    pred_type = statement.get("predicateType")
+    assert pred_type == "https://model_signing/signature/v1.0", (
+        f"predicateType must be 'https://model_signing/signature/v1.0', got '{pred_type}'"
+    )
+
+
+def _assert_subject(bundle_path: Path) -> None:
+    """Assert subject has exactly one entry with non-empty name and sha256 digest (§6.5)."""
+    bundle = json.loads(bundle_path.read_text())
+    statement = decode_payload(bundle)
+    subjects = statement.get("subject", [])
+    assert len(subjects) == 1, f"subject must contain exactly one entry, got {len(subjects)}"
+    subj = subjects[0]
+    name = subj.get("name", "")
+    assert name and isinstance(name, str), (
+        f"subject[0].name must be a non-empty string, got '{name}'"
+    )
+    digest = subj.get("digest", {})
+    assert "sha256" in digest, "subject[0].digest must contain 'sha256' key (§6.5.1)"
+
+
+def _assert_serialization_fields(bundle_path: Path) -> None:
+    """Assert serialization object has all required fields (§5.2.2)."""
+    bundle = json.loads(bundle_path.read_text())
+    statement = decode_payload(bundle)
+    serialization = statement.get("predicate", {}).get("serialization", {})
+
+    method = serialization.get("method")
+    assert method in ("files", "shards"), (
+        f"serialization.method must be 'files' or 'shards', got '{method}'"
+    )
+
+    assert "hash_type" in serialization, "serialization.hash_type is required (§5.2.2)"
+    assert "allow_symlinks" in serialization, "serialization.allow_symlinks is required (§5.2.2)"
+
+    if method == "files":
+        assert "shard_size" not in serialization, (
+            "shard_size must be absent when method is 'files' (§5.2.2)"
+        )
+    elif method == "shards":
+        shard_size = serialization.get("shard_size")
+        assert isinstance(shard_size, int) and shard_size > 0, (
+            f"shard_size must be a positive integer when method is 'shards', got {shard_size}"
+        )
+
+
+def _assert_resource_fields(bundle_path: Path) -> None:
+    """Assert each resource descriptor has required fields (§5.2.1)."""
+    bundle = json.loads(bundle_path.read_text())
+    statement = decode_payload(bundle)
+    resources = statement.get("predicate", {}).get("resources", [])
+    assert len(resources) >= 1, "resources must contain at least one entry (§5.2.1)"
+    for i, r in enumerate(resources):
+        assert "name" in r, f"resources[{i}] missing 'name' (§5.2.1)"
+        assert "digest" in r, f"resources[{i}] missing 'digest' (§5.2.1)"
+        assert "algorithm" in r, f"resources[{i}] missing 'algorithm' (§5.2.1)"
+        name = r["name"]
+        assert not name.startswith("/"), f"resources[{i}].name must not start with '/' (§6.1.2)"
+        assert "../" not in name, f"resources[{i}].name must not contain '../' (§6.1.2)"
+        assert not name.endswith("/"), f"resources[{i}].name must not end with '/' (§6.1.2)"
 
 
 def _assert_signature_excluded(bundle_path: Path, model_path: Path) -> None:
@@ -141,6 +218,10 @@ def test_roundtrip(
     assert bundle_path.exists(), f"[{label}] bundle.sig not created after signing"
 
     validate_bundle(bundle_path, method=cfg.method)
+    _assert_statement_fields(bundle_path)
+    _assert_subject(bundle_path)
+    _assert_serialization_fields(bundle_path)
+    _assert_resource_fields(bundle_path)
     _assert_resources_sorted(bundle_path)
     _assert_root_digest(bundle_path)
     if cfg.sig_inside_model:
